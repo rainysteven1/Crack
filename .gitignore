@@ -1,0 +1,7 @@
+/result
+/resources/*
+!/resources/config/
+!/resources/img/
+**/__pycache__
+/test.*
+/*.npy

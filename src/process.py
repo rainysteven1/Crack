@@ -1,0 +1,298 @@
+import io, os, sys, time
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import DataLoader
+from torch.optim.lr_scheduler import LambdaLR
+from torchsummary import summary
+from torchmetrics.classification import BinaryAccuracy
+from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
+
+from src import DEVICE, GPU_NAME
+from dataset import CrackDataset
+from core.modules import DiceLoss
+from core.res_unet import ResUNet1
+
+
+def lr_schedule(epoch):
+    scale_factor = 1
+    if epoch > 150:
+        scale_factor *= 2 ** (-1)
+    elif epoch > 80:
+        scale_factor *= 2 ** (-1)
+    elif epoch > 50:
+        scale_factor *= 2 ** (-1)
+    elif epoch > 30:
+        scale_factor *= 2 ** (-1)
+    return scale_factor
+
+
+def IOU(y_pred, y_true):
+    y_pred_f = torch.flatten(y_pred)
+    y_true_f = torch.flatten(y_true)
+
+    thresh = 0.5
+    y_pred_f = torch.ge(y_pred, thresh).float()
+    y_true_f = torch.ge(y_true, thresh).float()
+
+    union = torch.sum(torch.maximum(y_pred_f, y_true_f)) + torch.finfo().eps
+    intersection = torch.sum(torch.minimum(y_pred_f, y_true_f)) + torch.finfo().eps
+    return intersection / union
+
+
+class Process:
+    def __init__(
+        self,
+        input_dim,
+        output_dim,
+        batch_height,
+        batch_width,
+        logger,
+        load_model_dir="",
+    ) -> None:
+        self.device = DEVICE
+        self.gpu_name = GPU_NAME
+        self.logger = logger
+        self.load_model_dir = load_model_dir
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.batch_height = batch_height
+        self.batch_width = batch_width
+
+        self.model = ResUNet1(self.input_dim, self.output_dim).to(DEVICE)
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=0.0035, eps=1e-7, amsgrad=True
+        )
+        self.scheduler = LambdaLR(self.optimizer, lr_schedule, verbose=True)
+        self.criterion = DiceLoss()
+        self.metric = BinaryAccuracy().to(DEVICE)
+
+    def train(self, path_dict, batch_size, epochs, train_split, loss_csv):
+        self.log_model_summary(batch_size)
+        N_train = 1896
+        train_indices = np.random.choice(N_train, train_split, replace=False)
+        validation_indices = np.delete(np.arange(N_train), train_indices)
+        train_dataset = CrackDataset(
+            [path_dict["train"]["image"][i] for i in train_indices],
+            [path_dict["train"]["mask"][i] for i in train_indices],
+            self.batch_height,
+            self.batch_width,
+            is_augment=True,
+        )
+        validation_dataset = CrackDataset(
+            [path_dict["train"]["image"][i] for i in validation_indices],
+            [path_dict["train"]["mask"][i] for i in validation_indices],
+            self.batch_height,
+            self.batch_width,
+            is_augment=False,
+        )
+        train_loader = DataLoader(
+            train_dataset, batch_size, shuffle=True, num_workers=1, pin_memory=True
+        )
+        validation_loader = DataLoader(
+            validation_dataset,
+            batch_size,
+            shuffle=False,
+            num_workers=1,
+            pin_memory=True,
+        )
+        train_length = len(train_loader)
+        self.logger.info(train_length)
+        validation_length = len(validation_loader)
+        self.logger.info("number of train data batch: %d" % train_length)
+        self.logger.info("number of validation data batch: %d" % validation_length)
+
+        best_loss = float("inf")
+        loss_list = list()
+
+        for epoch in range(1, epochs + 1):
+            start_time = time.time()
+
+            self.model.train()
+            train_loss = 0.0
+            train_IOU = 0.0
+            train_acc = 0.0
+            for x, y in train_loader:
+                x = x.to(self.device, dtype=torch.float32)
+                y = y.to(self.device, dtype=torch.float32)
+                self.optimizer.zero_grad()
+                y_pred = self.model(x)
+                loss = self.criterion(y_pred, y)
+                loss.backward()
+                self.optimizer.step()
+                train_loss += loss.item()
+                train_IOU += IOU(y_pred, y).item()
+                train_acc += self.metric(y_pred.view(-1), y.view(-1)).item()
+            train_loss /= train_length
+            train_IOU /= train_length
+            train_acc /= train_length
+
+            self.model.eval()
+            validation_loss = 0.0
+            validation_IOU = 0.0
+            validation_acc = 0.0
+            with torch.no_grad():
+                for x, y in validation_loader:
+                    x = x.to(self.device, dtype=torch.float32)
+                    y = y.to(self.device, dtype=torch.float32)
+                    y_pred = self.model(x)
+                    loss = self.criterion(y_pred, y)
+                    validation_loss += loss.item()
+                    validation_IOU += IOU(y_pred, y).item()
+                    validation_acc += self.metric(y_pred.view(-1), y.view(-1)).item()
+            validation_loss /= validation_length
+            validation_IOU /= validation_length
+            validation_acc /= validation_length
+
+            duration = time.time() - start_time
+            lr = self.optimizer.param_groups[0]["lr"]
+            logger_msg = (
+                "Epoch: %5d/%d - %ds - lr: %.4e - loss: %.4f - acc: %.4f - IOU: %.4f - val_loss: %.4f - val_acc: %.4f - val_IOU: %.4f"
+                % (
+                    epoch,
+                    epochs,
+                    duration,
+                    lr,
+                    train_loss,
+                    train_acc,
+                    train_IOU,
+                    validation_loss,
+                    validation_acc,
+                    validation_IOU,
+                )
+            )
+            self.logger.info(logger_msg)
+            loss_list.append(
+                dict(
+                    [
+                        string.replace(" ", "").split(":")
+                        for string in filter(
+                            lambda x: x.find(":") != -1, logger_msg.split(" - ")
+                        )
+                    ]
+                )
+            )
+
+            if validation_loss < best_loss:
+                checkpoint_path = os.path.join(self.load_model_dir, "checkpoint.pth")
+                self.logger.info(
+                    f"Valid loss improved from {best_loss:2.4f} to {validation_loss:2.4f}. Saving checkpoint: {checkpoint_path}"
+                )
+                best_loss = validation_loss
+                torch.save(self.model.state_dict(), checkpoint_path)
+
+            self.scheduler.step()
+
+        df = pd.DataFrame(loss_list)
+        df.to_csv(loss_csv, encoding="utf8", index=False)
+        torch.save(
+            self.model.state_dict, os.path.join(self.load_model_dir, "model.pth")
+        )
+        self.logger.info("Train Done!")
+
+    def predict(self, path_dict, batch_size):
+        print(self.load_model_dir)
+        self.model.load_state_dict(
+            torch.load(self.load_model_dir, map_location=self.device)
+        )
+        self.log_model_summary(batch_size)
+        self.logger.info(f"Loading Model State from {self.load_model_dir}")
+
+        dataset = CrackDataset(
+            path_dict["test"]["image"],
+            path_dict["test"]["mask"],
+            self.batch_height,
+            self.batch_width,
+            is_augment=False,
+        )
+        loader = DataLoader(dataset, batch_size, num_workers=1, pin_memory=1)
+        x_all = torch.empty(
+            (
+                0,
+                3,
+                self.batch_height,
+                self.batch_width,
+            ),
+            device=self.device,
+            dtype=torch.float32,
+        )
+        y_true_all = torch.empty(
+            (
+                0,
+                self.output_dim,
+                self.batch_height,
+                self.batch_width,
+            ),
+            device=self.device,
+            dtype=torch.float32,
+        )
+        y_pred_all = torch.empty_like(
+            y_true_all,
+            device=self.device,
+            dtype=torch.float32,
+        )
+
+        start_time = time.time()
+        self.model.eval()
+        with torch.no_grad():
+            for x, y in loader:
+                x = x.to(self.device, dtype=torch.float32)
+                y = y.to(self.device, dtype=torch.float32)
+                y_pred = self.model(x)
+                x_all = torch.cat((x_all, x), dim=0)
+                y_true_all = torch.cat((y_true_all, y), dim=0)
+                y_pred_all = torch.cat((y_pred_all, y_pred), dim=0)
+
+        x_all = x_all.detach().cpu().numpy()
+        y_true_all = y_true_all.detach().cpu().numpy()
+        y_pred_all = y_pred_all.detach().cpu().numpy()
+        self.log_metrics(y_true_all, y_pred_all)
+
+        duration = time.time() - start_time
+        self.logger.info("Duration - %5ds" % (duration))
+        self.logger.info("Predict Done!")
+        return {
+            "Image": {"data": x_all, "is_gray": False},
+            "Mask": {"data": y_true_all, "is_gray": True},
+            "Prediction": {"data": y_pred_all, "is_gray": True},
+        }
+
+    def log_model_summary(self, batch_size):
+        output = io.StringIO()
+        sys.stdout = output
+        summary(
+            self.model,
+            (self.input_dim, self.batch_height, self.batch_width),
+            batch_size,
+            self.device,
+        )
+        sys.stdout = sys.__stdout__
+        summary_output = output.getvalue()
+        self.logger.info("Model:\n{}".format(summary_output))
+
+    def log_metrics(self, y_true, y_pred):
+        yy_true = (y_true > 0.5).flatten()
+        yy_pred = (y_pred > 0.5).flatten()
+
+        report = classification_report(yy_true, yy_pred, output_dict=True)
+        accuracy = accuracy_score(yy_true, yy_pred)
+
+        precision = report["True"]["precision"]
+        recall = report["True"]["recall"]
+        f1_score = report["True"]["f1-score"]
+        sensitivity = recall
+        specificity = report["False"]["recall"]
+
+        AUC = roc_auc_score(y_true.flatten(), y_pred.flatten())
+        IOU = (precision * recall) / (precision + recall - precision * recall)
+
+        self.logger.info(f"Accuracy: {accuracy:.4f}")
+        self.logger.info(f"Precision: {precision:.4f}")
+        self.logger.info(f"Recall: {recall:.4f}")
+        self.logger.info(f"F1-Score: {f1_score:.4f}")
+        self.logger.info(f"Sensitivity: {sensitivity:.4f}")
+        self.logger.info(f"Specificity: {specificity:.4f}")
+        self.logger.info(f"AUC: {AUC:.4f}")
+        self.logger.info(f"IOU: {IOU:.4f}")
+        self.logger.info("Report:\n{}".format(classification_report(yy_true, yy_pred)))
