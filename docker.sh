@@ -1,18 +1,26 @@
 #!/bin/bash
-TAG=$1
-IMAGE_NAME="rainy/unet:$TAG"
-CONTAINER_NAME="RETINA_UNET"
+CONFIG_PATH="resources/config/configuration.json"
+CRACK500_PATH="resources/data/crack500"
 
-if [ "$(docker image inspect "$IMAGE_NAME" 2>/dev/null)" = "[]" ]; then
-    docker buildx build -t "$IMAGE_NAME" "$PWD"
+tag=$1
+container_name=$2
+image_name="rainy/crack:$tag"
+workspace_dir="/workspace/$container_name"
+
+if [ "$(docker image inspect "$image_name" 2>/dev/null)" = "[]" ]; then
+    docker buildx build -t "$image_name" "$PWD"
 else
-    if docker ps -a --format "{{.Names}}" | grep -qw "$CONTAINER_NAME"; then
-        docker stop "$CONTAINER_NAME" && docker rm "$CONTAINER_NAME"
+    if docker ps -a --format "{{.Names}}" | grep -qw "$container_name"; then
+        docker stop "$container_name" && docker rm "$container_name"
     fi
-    docker run -itd --name "$CONTAINER_NAME" --rm \
-        --gpus all \
-        --net host \
-        -v "$PWD":/workspace/"$CONTAINER_NAME" \
-        "$IMAGE_NAME"
-    docker exec -it "$CONTAINER_NAME" /bin/bash -c "/workspace/"$CONTAINER_NAME"/run.sh $CONTAINER_NAME"
 fi
+
+jq --arg new_path "$workspace_dir/$CRACK500_PATH" '.["data path"]["data_path"] = $new_path' "$CONFIG_PATH" >tmp.json
+mv tmp.json "$CONFIG_PATH"
+
+docker run -itd --name "$container_name" --rm \
+    --gpus all \
+    --net host \
+    -v "$PWD":/workspace/"$container_name" \
+    "$image_name"
+docker exec -d "$container_name" /bin/bash -c "$workspace_dir/run.sh $workspace_dir"
