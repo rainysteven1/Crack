@@ -6,6 +6,6 @@
 
 - [ResUNet](http://arxiv.org/abs/1711.10684)
 
-![architecture](resources/image/ResUNet.png)
+![architecture](resources/image/ResUNet0.png)
 
 ## Quick Start

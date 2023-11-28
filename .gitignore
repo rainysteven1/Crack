@@ -1,7 +1,7 @@
 /result
 /resources/*
 !/resources/config/
-!/resources/img/
+!/resources/image/
 **/__pycache__
 /test.*
 /*.npy
