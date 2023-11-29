@@ -2,6 +2,7 @@ import io, os, sys, time
 import numpy as np
 import pandas as pd
 import torch
+import torchmetrics.functional as F
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
 from torchsummary import summary
@@ -88,17 +89,12 @@ class Process:
             is_augment=False,
         )
         train_loader = DataLoader(
-            train_dataset, batch_size, shuffle=True, num_workers=1, pin_memory=True
+            train_dataset, batch_size, num_workers=1, pin_memory=True
         )
         validation_loader = DataLoader(
-            validation_dataset,
-            batch_size,
-            shuffle=False,
-            num_workers=1,
-            pin_memory=True,
+            validation_dataset, batch_size, num_workers=1, pin_memory=True
         )
         train_length = len(train_loader)
-        self.logger.info(train_length)
         validation_length = len(validation_loader)
         self.logger.info("number of train data batch: %d" % train_length)
         self.logger.info("number of validation data batch: %d" % validation_length)
@@ -247,7 +243,7 @@ class Process:
         x_all = x_all.detach().cpu().numpy()
         y_true_all = y_true_all.detach().cpu().numpy()
         y_pred_all = y_pred_all.detach().cpu().numpy()
-        self.log_metrics(y_true_all, y_pred_all)
+        self.calculate_test_metrics_gpu(y_true_all, y_pred_all)
 
         duration = time.time() - start_time
         self.logger.info("Duration - %5ds" % (duration))
@@ -257,6 +253,61 @@ class Process:
             "Mask": {"data": y_true_all, "is_gray": True},
             "Prediction": {"data": y_pred_all, "is_gray": True},
         }
+
+    def calculate_test_metrics_cpu(self, y_true, y_pred):
+        thresholds = 0.5
+        yy_true = (y_true > thresholds).flatten()
+        yy_pred = (y_pred > thresholds).flatten()
+
+        report = classification_report(yy_true, yy_pred, output_dict=True)
+        accuracy = accuracy_score(yy_true, yy_pred)
+
+        precision = report["True"]["precision"]
+        recall = report["True"]["recall"]
+        f1_score = report["True"]["f1-score"]
+        sensitivity = recall
+        specificity = report["False"]["recall"]
+
+        AUC = roc_auc_score(y_true.flatten(), y_pred.flatten())
+        IOU = (precision * recall) / (precision + recall - precision * recall)
+
+        self.log_test_metrics(
+            accuracy,
+            precision,
+            recall,
+            f1_score,
+            sensitivity,
+            specificity,
+            AUC,
+            IOU,
+            report,
+        )
+
+    def calculate_test_metrics_gpu(self, y_true, y_pred):
+        yy_pred = y_pred.flatten()
+        yy_true = y_true.flatten()
+
+        accuracy = F.accuracy(yy_pred, yy_true, task="binary")
+
+        precision = F.precision(yy_pred, yy_true, task="binary")
+        recall = F.recall(yy_pred, yy_true, task="binary")
+        f1_score = F.f1_score(yy_pred, yy_true, task="binary")
+        sensitivity = recall
+        specificity = F.specificity(yy_pred, yy_true, task="binary")
+
+        AUC = F.auroc(yy_pred, yy_true, task="binary")
+        IOU = (precision * recall) / (precision + recall - precision * recall)
+
+        self.log_test_metrics(
+            accuracy.item(),
+            precision.item(),
+            recall.item(),
+            f1_score.item(),
+            sensitivity.item(),
+            specificity.item(),
+            AUC.item(),
+            IOU.item(),
+        )
 
     def log_model_summary(self, batch_size):
         output = io.StringIO()
@@ -271,22 +322,18 @@ class Process:
         summary_output = output.getvalue()
         self.logger.info("Model:\n{}".format(summary_output))
 
-    def log_metrics(self, y_true, y_pred):
-        yy_true = (y_true > 0.5).flatten()
-        yy_pred = (y_pred > 0.5).flatten()
-
-        report = classification_report(yy_true, yy_pred, output_dict=True)
-        accuracy = accuracy_score(yy_true, yy_pred)
-
-        precision = report["True"]["precision"]
-        recall = report["True"]["recall"]
-        f1_score = report["True"]["f1-score"]
-        sensitivity = recall
-        specificity = report["False"]["recall"]
-
-        AUC = roc_auc_score(y_true.flatten(), y_pred.flatten())
-        IOU = (precision * recall) / (precision + recall - precision * recall)
-
+    def log_test_metrics(
+        self,
+        accuracy,
+        precision,
+        recall,
+        f1_score,
+        sensitivity,
+        specificity,
+        AUC,
+        IOU,
+        report=None,
+    ):
         self.logger.info(f"Accuracy: {accuracy:.4f}")
         self.logger.info(f"Precision: {precision:.4f}")
         self.logger.info(f"Recall: {recall:.4f}")
@@ -295,4 +342,5 @@ class Process:
         self.logger.info(f"Specificity: {specificity:.4f}")
         self.logger.info(f"AUC: {AUC:.4f}")
         self.logger.info(f"IOU: {IOU:.4f}")
-        self.logger.info("Report:\n{}".format(classification_report(yy_true, yy_pred)))
+        if report:
+            self.logger.info(f"Report:\n{report}")

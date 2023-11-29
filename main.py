@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
         data_dict = process.predict(path_dict, test_settings["batch_size"])
         visualize(
-            process.predict(path_dict, test_settings["batch_size"]),
+            data_dict,
             0,
             os.path.join(working_dir, "figure", "result.png"),
         )

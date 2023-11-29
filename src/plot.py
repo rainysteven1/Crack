@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from PIL import Image
 
 
 def plot_data(images, masks, size, category, is_original=True):
@@ -30,7 +29,7 @@ def plot_loss(loss_csv, figure_path):
     train_loss = df["loss"]
     validation_loss = df["val_loss"]
 
-    fig, axes = plt.subplots(1, 1, figsize=(13, 4))
+    _, axes = plt.subplots(1, 1, figsize=(13, 4))
     axes.plot(train_loss, label="training")
     axes.plot(validation_loss, label="validation")
     axes.set_title("Loss Curve")
@@ -48,7 +47,7 @@ def plot_metrics(loss_csv, figure_path):
     train_IOU = df["IOU"]
     validation_IOU = df["val_IOU"]
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+    _, axes = plt.subplots(1, 2, figsize=(13, 4))
     axes = axes.flatten()
 
     axes[0].plot(train_acc, label="training")
@@ -69,7 +68,7 @@ def plot_metrics(loss_csv, figure_path):
 
 
 def visualize(data_dict, index, figure_path):
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    _, axes = plt.subplots(1, 3, figsize=(13, 4))
     for idx, (key, value) in enumerate(data_dict.items()):
         axes[idx].imshow(
             np.transpose(value["data"][index], (1, 2, 0)),
