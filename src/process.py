@@ -1,12 +1,14 @@
-import io, os, sys, time
+import io, os, sys, time, logging
 import numpy as np
 import pandas as pd
 import torch
 import torchmetrics.functional as F
+
+from typing import Literal
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
 from torchsummary import summary
-from torchmetrics.classification import BinaryAccuracy
+from torchmetrics.classification import BinaryAccuracy, Accuracy
 from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 
 from src import DEVICE, GPU_NAME
@@ -44,12 +46,12 @@ def IOU(y_pred, y_true):
 class Process:
     def __init__(
         self,
-        input_dim,
-        output_dim,
-        batch_height,
-        batch_width,
-        logger,
-        load_model_dir="",
+        input_dim: int,
+        output_dim: int,
+        batch_height: int,
+        batch_width: int,
+        logger: logging.Logger,
+        load_model_dir: str = "",
     ) -> None:
         self.device = DEVICE
         self.gpu_name = GPU_NAME
@@ -69,7 +71,14 @@ class Process:
         self.criterion = DiceLoss()
         self.metric = BinaryAccuracy().to(DEVICE)
 
-    def train(self, path_dict, batch_size, epochs, train_split, loss_csv):
+    def train(
+        self,
+        path_dict: dict,
+        batch_size: int,
+        epochs: int,
+        train_split: int,
+        loss_csv: str,
+    ):
         self.log_model_summary(batch_size)
         N_train = 1896
         train_indices = np.random.choice(N_train, train_split, replace=False)
@@ -187,8 +196,12 @@ class Process:
         )
         self.logger.info("Train Done!")
 
-    def predict(self, path_dict, batch_size):
-        print(self.load_model_dir)
+    def predict(
+        self,
+        path_dict: dict,
+        batch_size: int,
+        calulate_metrics_mode: Literal["cpu", "gpu"] = "gpu",
+    ):
         self.model.load_state_dict(
             torch.load(self.load_model_dir, map_location=self.device)
         )
@@ -240,13 +253,16 @@ class Process:
                 y_true_all = torch.cat((y_true_all, y), dim=0)
                 y_pred_all = torch.cat((y_pred_all, y_pred), dim=0)
 
+        if calulate_metrics_mode == "gpu":
+            self.calculate_test_metrics_gpu(y_true_all, y_pred_all)
         x_all = x_all.detach().cpu().numpy()
         y_true_all = y_true_all.detach().cpu().numpy()
         y_pred_all = y_pred_all.detach().cpu().numpy()
-        self.calculate_test_metrics_gpu(y_true_all, y_pred_all)
+        if calulate_metrics_mode == "cpu":
+            self.calculate_test_metrics_cpu(y_true_all, y_pred_all)
 
         duration = time.time() - start_time
-        self.logger.info("Duration - %5ds" % (duration))
+        self.logger.info("Duration - %ds" % (duration))
         self.logger.info("Predict Done!")
         return {
             "Image": {"data": x_all, "is_gray": False},
@@ -254,7 +270,7 @@ class Process:
             "Prediction": {"data": y_pred_all, "is_gray": True},
         }
 
-    def calculate_test_metrics_cpu(self, y_true, y_pred):
+    def calculate_test_metrics_cpu(self, y_true: np.ndarray, y_pred: np.ndarray):
         thresholds = 0.5
         yy_true = (y_true > thresholds).flatten()
         yy_pred = (y_pred > thresholds).flatten()
@@ -283,9 +299,9 @@ class Process:
             report,
         )
 
-    def calculate_test_metrics_gpu(self, y_true, y_pred):
-        yy_pred = y_pred.flatten()
-        yy_true = y_true.flatten()
+    def calculate_test_metrics_gpu(self, y_true: torch.Tensor, y_pred: torch.Tensor):
+        yy_true = torch.flatten(y_true)
+        yy_pred = torch.flatten(y_pred)
 
         accuracy = F.accuracy(yy_pred, yy_true, task="binary")
 
@@ -295,7 +311,7 @@ class Process:
         sensitivity = recall
         specificity = F.specificity(yy_pred, yy_true, task="binary")
 
-        AUC = F.auroc(yy_pred, yy_true, task="binary")
+        AUC = F.auroc(yy_pred, yy_true.int(), task="binary")
         IOU = (precision * recall) / (precision + recall - precision * recall)
 
         self.log_test_metrics(
@@ -309,7 +325,7 @@ class Process:
             IOU.item(),
         )
 
-    def log_model_summary(self, batch_size):
+    def log_model_summary(self, batch_size: int):
         output = io.StringIO()
         sys.stdout = output
         summary(
