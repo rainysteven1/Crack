@@ -126,7 +126,9 @@ if __name__ == "__main__":
         )
         logger_basic(process)
 
-        data_dict = process.predict(path_dict, test_settings["batch_size"])
+        data_dict = process.predict(
+            path_dict, test_settings["batch_size"], test_settings["metrics_mode"]
+        )
         visualize(
             data_dict,
             0,
