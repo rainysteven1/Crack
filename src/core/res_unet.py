@@ -1,6 +1,6 @@
 import torch.nn as nn
 from torchsummary import summary
-from modules import *
+from .modules import *
 
 
 class ResUNet0(nn.Module):

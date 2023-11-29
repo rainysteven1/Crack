@@ -2,7 +2,7 @@ import io, os, sys, time, logging
 import numpy as np
 import pandas as pd
 import torch
-import torchmetrics.functional as F
+import torchmetrics
 
 from typing import Literal
 from torch.utils.data import DataLoader
@@ -112,6 +112,7 @@ class Process:
         loss_list = list()
 
         for epoch in range(1, epochs + 1):
+            self.scheduler.step()
             start_time = time.time()
 
             self.model.train()
@@ -186,8 +187,6 @@ class Process:
                 )
                 best_loss = validation_loss
                 torch.save(self.model.state_dict(), checkpoint_path)
-
-            self.scheduler.step()
 
         df = pd.DataFrame(loss_list)
         df.to_csv(loss_csv, encoding="utf8", index=False)
@@ -303,15 +302,17 @@ class Process:
         yy_true = torch.flatten(y_true)
         yy_pred = torch.flatten(y_pred)
 
-        accuracy = F.accuracy(yy_pred, yy_true, task="binary")
+        accuracy = torchmetrics.functional.accuracy(yy_pred, yy_true, task="binary")
 
-        precision = F.precision(yy_pred, yy_true, task="binary")
-        recall = F.recall(yy_pred, yy_true, task="binary")
-        f1_score = F.f1_score(yy_pred, yy_true, task="binary")
+        precision = torchmetrics.functional.precision(yy_pred, yy_true, task="binary")
+        recall = torchmetrics.functional.recall(yy_pred, yy_true, task="binary")
+        f1_score = torchmetrics.functional.f1_score(yy_pred, yy_true, task="binary")
         sensitivity = recall
-        specificity = F.specificity(yy_pred, yy_true, task="binary")
+        specificity = torchmetrics.functional.specificity(
+            yy_pred, yy_true, task="binary"
+        )
 
-        AUC = F.auroc(yy_pred, yy_true.int(), task="binary")
+        AUC = torchmetrics.functional.auroc(yy_pred, yy_true.int(), task="binary")
         IOU = (precision * recall) / (precision + recall - precision * recall)
 
         self.log_test_metrics(
