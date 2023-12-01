@@ -6,6 +6,7 @@ from ..modules import (
     RedisualBlock,
     SqueezeExciteBlock,
     ASPP,
+    ASPP_v3,
     AttentionBlock,
 )
 
@@ -69,7 +70,7 @@ class ResUNetPlusPlus(nn.Module):
         self.e3 = EncoderBlock(filters[2], filters[3])
 
         # Bridge
-        self.b1 = ASPP(filters[3], filters[4])
+        self.b1 = ASPP_v3(filters[3], filters[4])
 
         # Decoder
         self.d1 = DecoderBlock(filters[4], filters[3], skip_dim=filters[2])
@@ -78,7 +79,7 @@ class ResUNetPlusPlus(nn.Module):
 
         # Output
         self.output_layer = nn.Sequential(
-            ASPP(filters[1], filters[0]),
+            ASPP_v3(filters[1], filters[0]),
             Conv2dSame(filters[0], output_dim, kernel_size=1, padding="same"),
             nn.Sigmoid(),
         )

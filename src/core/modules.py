@@ -161,7 +161,7 @@ class ASPP(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, rate_scale: int = 1) -> None:
         super().__init__()
 
-        def gen_block(dilation: int):
+        def gen_conv_block(dilation: int):
             return nn.Sequential(
                 Conv2dSame(
                     input_dim,
@@ -173,10 +173,10 @@ class ASPP(nn.Module):
                 nn.BatchNorm2d(output_dim),
             )
 
-        self.conv_block1 = gen_block(6 * rate_scale)
-        self.conv_block2 = gen_block(12 * rate_scale)
-        self.conv_block3 = gen_block(18 * rate_scale)
-        self.conv_block4 = gen_block(1)
+        self.conv_block1 = gen_conv_block(6 * rate_scale)
+        self.conv_block2 = gen_conv_block(12 * rate_scale)
+        self.conv_block3 = gen_conv_block(18 * rate_scale)
+        self.conv_block4 = gen_conv_block(1)
         self.output_layer = Conv2dSame(
             output_dim, output_dim, kernel_size=1, padding="same"
         )
@@ -192,6 +192,69 @@ class ASPP(nn.Module):
         return output
 
 
+class ASPPPooling(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int) -> None:
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
+            nn.BatchNorm2d(output_dim),
+            nn.ReLU(),
+        )
+
+    def forward(self, input):
+        return F.interpolate(
+            self.layers(input),
+            size=input.shape[-2:],
+            mode="nearest",
+        )
+
+
 class ASPP_v3(nn.Module):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    """
+    version: DeepLabv3
+    """
+
+    def __init__(self, input_dim: int, output_dim: int, rate_scale: int = 1) -> None:
+        super().__init__()
+        dilations = [1, 6, 12, 18]
+
+        # ASPP_CONV
+        def gen_conv_block(dilation):
+            return nn.Sequential(
+                Conv2dSame(
+                    input_dim,
+                    output_dim,
+                    kernel_size=3,
+                    padding="same",
+                    dilation=dilation,
+                ),
+                nn.BatchNorm2d(output_dim),
+                nn.ReLU(),
+            )
+
+        self.module_list = nn.ModuleList(
+            [gen_conv_block(dilation * rate_scale) for dilation in dilations]
+        )
+
+        # ASPP_POOL
+        self.module_list.append(ASPPPooling(input_dim, output_dim))
+
+        # Output
+        self.output_layer = nn.Sequential(
+            Conv2dSame(
+                len(self.module_list) * output_dim,
+                output_dim,
+                kernel_size=1,
+                padding="same",
+            ),
+            nn.BatchNorm2d(output_dim),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+        )
+
+    def forward(self, input):
+        x_list = [module(input) for module in self.module_list]
+        x1 = torch.cat(x_list, dim=1)
+        output = self.output_layer(x1)
+        return output
