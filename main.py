@@ -129,8 +129,15 @@ if __name__ == "__main__":
         data_dict = process.predict(
             path_dict, test_settings["batch_size"], test_settings["metrics_mode"]
         )
-        visualize(
-            data_dict,
-            list(range(10)),
-            os.path.join(working_dir, "figure"),
-        )
+        if "data" in data_dict["Prediction"]:
+            visualize(
+                data_dict,
+                list(range(10)),
+                os.path.join(working_dir, "figure"),
+            )
+        else:
+            visualize_dict(
+                data_dict,
+                list(range(10)),
+                os.path.join(working_dir, "figure"),
+            )

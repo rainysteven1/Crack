@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from ..modules import Conv2dSame
+from ..modules import Conv2dSame, OutputBlock
 
 
 class BasicBlock(nn.Module):
@@ -107,11 +107,7 @@ class ResUNetPool(nn.Module):
         self.d4 = DecoderBlock(filters[1], filters[0], filters[0], is_upsample=False)
 
         # Output
-        self.ouput_layer = nn.Sequential(
-            Conv2dSame(filters[0], output_dim, kernel_size=1, stride=1, padding="same"),
-            nn.BatchNorm2d(output_dim),
-            nn.Sigmoid(),
-        )
+        self.ouput_layer = OutputBlock(filters[0], output_dim, is_bn=True)
 
     def forward(self, input):
         # Encoder

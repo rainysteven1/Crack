@@ -8,6 +8,7 @@ from ..modules import (
     ASPP,
     ASPP_v3,
     AttentionBlock,
+    OutputBlock,
 )
 
 
@@ -80,8 +81,7 @@ class ResUNetPlusPlus(nn.Module):
         # Output
         self.output_layer = nn.Sequential(
             ASPP_v3(filters[1], filters[0]),
-            Conv2dSame(filters[0], output_dim, kernel_size=1, padding="same"),
-            nn.Sigmoid(),
+            OutputBlock(filters[0], output_dim),
         )
 
     def forward(self, input):

@@ -5,6 +5,15 @@
 ## Citation
 
 <pre>
+@INPROCEEDINGS{9183321,
+  author={D. {Jha} and M. A. {Riegler} and D. {Johansen} and P. {Halvorsen} and H. D. {Johansen}},
+  booktitle={2020 IEEE 33rd International Symposium on Computer-Based Medical Systems (CBMS)}, 
+  title={DoubleU-Net: A Deep Convolutional Neural Network for Medical Image Segmentation}, 
+  year={2020},
+  pages={558-564}}
+</pre>
+
+<pre>
 @INPROCEEDINGS{8959021,
   author={D. {Jha} and P. H. {Smedsrud} and M. A. {Riegler} and D. {Johansen} and T. D. {Lange} and P. {Halvorsen} and H. {D. Johansen}},
   booktitle={2019 IEEE International Symposium on Multimedia (ISM)}, 

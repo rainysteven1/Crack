@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torchsummary import summary
-from ..modules import Conv2dSame, BasicBlock, RedisualBlock
+from ..modules import Conv2dSame, BasicBlock, RedisualBlock, OutputBlock
 
 
 class InputBlock(nn.Module):
@@ -103,7 +103,7 @@ class ResUNet0(nn.Module):
     def __init__(
         self,
         input_dim: int,
-        ouput_dim: int,
+        output_dim: int,
         filters: list = [64, 128, 256, 512],
     ) -> None:
         super().__init__()
@@ -157,10 +157,7 @@ class ResUNet0(nn.Module):
         )
 
         # Output
-        self.output_layer = nn.Sequential(
-            Conv2dSame(filters[0], ouput_dim, kernel_size=1),
-            nn.Sigmoid(),
-        )
+        self.output_layer = OutputBlock(filters[0], output_dim)
 
     def forward(self, input):
         # Encoder
@@ -204,10 +201,7 @@ class ResUNet1(nn.Module):
         self.d4 = DecoderBlock(filters[2], filters[1], skip_dim=filters[0])
 
         # Output
-        self.output_layer = nn.Sequential(
-            Conv2dSame(filters[1], output_dim, kernel_size=1),
-            nn.Sigmoid(),
-        )
+        self.output_layer = OutputBlock(filters[1], output_dim)
 
     def forward(self, input):
         # Encoder
