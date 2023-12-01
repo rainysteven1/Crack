@@ -8,13 +8,16 @@ from typing import Literal
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
 from torchsummary import summary
-from torchmetrics.classification import BinaryAccuracy, Accuracy
+from torchmetrics.classification import BinaryAccuracy
 from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 
 from src import DEVICE, GPU_NAME
 from dataset import CrackDataset
-from core.modules import DiceLoss
-from core.res_unet import ResUNet1
+from core.losses import DiceLoss
+from core.metrics import IOU
+from core.unet import *
+from core.resunet import *
+from core.resunet_pp import *
 
 
 def lr_schedule(epoch):
@@ -28,19 +31,6 @@ def lr_schedule(epoch):
     elif epoch > 30:
         scale_factor *= 2 ** (-1)
     return scale_factor
-
-
-def IOU(y_pred, y_true):
-    y_pred_f = torch.flatten(y_pred)
-    y_true_f = torch.flatten(y_true)
-
-    thresh = 0.5
-    y_pred_f = torch.ge(y_pred, thresh).float()
-    y_true_f = torch.ge(y_true, thresh).float()
-
-    union = torch.sum(torch.maximum(y_pred_f, y_true_f)) + torch.finfo().eps
-    intersection = torch.sum(torch.minimum(y_pred_f, y_true_f)) + torch.finfo().eps
-    return intersection / union
 
 
 class Process:
@@ -63,7 +53,7 @@ class Process:
         self.batch_height = batch_height
         self.batch_width = batch_width
 
-        self.model = ResUNet1(self.input_dim, self.output_dim).to(DEVICE)
+        self.model = ResUNetPlusPlus(self.input_dim, self.output_dim).to(DEVICE)
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.0035, eps=1e-7, amsgrad=True
         )
@@ -112,7 +102,6 @@ class Process:
         loss_list = list()
 
         for epoch in range(1, epochs + 1):
-            self.scheduler.step()
             start_time = time.time()
 
             self.model.train()
@@ -187,6 +176,8 @@ class Process:
                 )
                 best_loss = validation_loss
                 torch.save(self.model.state_dict(), checkpoint_path)
+
+            self.scheduler.step()
 
         df = pd.DataFrame(loss_list)
         df.to_csv(loss_csv, encoding="utf8", index=False)

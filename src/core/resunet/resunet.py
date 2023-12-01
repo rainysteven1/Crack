@@ -1,33 +1,7 @@
 import torch
 import torch.nn as nn
 from torchsummary import summary
-from ..modules import Conv2dSame
-
-
-class BasicBlock(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        kernel_size: int,
-        stride: int,
-        padding: str | int,
-    ) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.BatchNorm2d(input_dim),
-            nn.ReLU(),
-            Conv2dSame(
-                input_dim,
-                output_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            ),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
+from ..modules import Conv2dSame, BasicBlock, RedisualBlock
 
 
 class InputBlock(nn.Module):
@@ -38,7 +12,7 @@ class InputBlock(nn.Module):
         kernal_size: int = 3,
         skip_kernal_size: int = 1,
         stride: int = 1,
-        padding: str | int = "same",
+        padding: str | int = 0,
         skip_bn: bool = True,
     ) -> None:
         super().__init__()
@@ -64,7 +38,7 @@ class InputBlock(nn.Module):
         return torch.add(self.conv_block(input), self.skip_block(input))
 
 
-class RedisualBlock(nn.Module):
+class EncoderBlock(RedisualBlock):
     def __init__(
         self,
         input_dim: int,
@@ -76,22 +50,12 @@ class RedisualBlock(nn.Module):
         is_bridge: bool = False,
     ) -> None:
         self.is_bridge = is_bridge
-        super().__init__()
-        self.conv_block = nn.Sequential(
-            BasicBlock(input_dim, output_dim, kernel_size, stride, padding),
-            BasicBlock(output_dim, output_dim, kernel_size, 1, padding),
-        )
-        self.skip_block = nn.Sequential(
-            Conv2dSame(input_dim, output_dim, skip_kernel_size, stride, padding),
-            nn.BatchNorm2d(output_dim),
+        super().__init__(
+            input_dim, output_dim, kernel_size, skip_kernel_size, stride, padding
         )
 
-    def forward(self, x):
-        return (
-            self.conv_block(x)
-            if self.is_bridge
-            else torch.add(self.conv_block(x), self.skip_block(x))
-        )
+    def forward(self, input):
+        return self.conv_block(input) if self.is_bridge else super().forward(input)
 
 
 class DecoderBlock(nn.Module):
@@ -148,15 +112,15 @@ class ResUNet0(nn.Module):
         self.input_layer = InputBlock(
             input_dim, filters[0], skip_kernal_size=3, padding=1
         )
-        self.e1 = RedisualBlock(
+        self.e1 = EncoderBlock(
             filters[0], filters[1], skip_kernel_size=3, stride=2, padding=1
         )
-        self.e2 = RedisualBlock(
+        self.e2 = EncoderBlock(
             filters[1], filters[2], skip_kernel_size=3, stride=2, padding=1
         )
 
         # Bridge
-        self.b1 = RedisualBlock(
+        self.b1 = EncoderBlock(
             filters[2], filters[3], skip_kernel_size=3, stride=2, padding=1
         )
 
@@ -225,13 +189,13 @@ class ResUNet1(nn.Module):
 
         # Encoder
         self.input_layer = InputBlock(input_dim, filters[0])
-        self.e1 = RedisualBlock(filters[0], filters[1], stride=2)
-        self.e2 = RedisualBlock(filters[1], filters[2], stride=2)
-        self.e3 = RedisualBlock(filters[2], filters[3], stride=2)
-        self.e4 = RedisualBlock(filters[3], filters[4], stride=2)
+        self.e1 = EncoderBlock(filters[0], filters[1], stride=2)
+        self.e2 = EncoderBlock(filters[1], filters[2], stride=2)
+        self.e3 = EncoderBlock(filters[2], filters[3], stride=2)
+        self.e4 = EncoderBlock(filters[3], filters[4], stride=2)
 
         # Bridge
-        self.b1 = RedisualBlock(filters[4], filters[4], is_bridge=True)
+        self.b1 = EncoderBlock(filters[4], filters[4], is_bridge=True)
 
         # Decoder
         self.d1 = DecoderBlock(filters[4], filters[4], skip_dim=filters[3])
