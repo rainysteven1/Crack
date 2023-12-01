@@ -14,7 +14,7 @@ from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 from src import DEVICE, GPU_NAME
 from dataset import CrackDataset
 from core.losses import DiceLoss
-from core.metrics import IOU
+from core.metrics import IOU, MetricTracker
 from core.unet import *
 from core.resunet import *
 from core.resunet_pp import *
@@ -98,47 +98,48 @@ class Process:
         self.logger.info("number of train data batch: %d" % train_length)
         self.logger.info("number of validation data batch: %d" % validation_length)
 
+        train_loss = MetricTracker()
+        train_IOU = MetricTracker()
+        train_acc = MetricTracker()
+        validation_loss = MetricTracker()
+        validation_IOU = MetricTracker()
+        validation_acc = MetricTracker()
+
         best_loss = float("inf")
-        loss_list = list()
+        msg_list = list()
 
         for epoch in range(1, epochs + 1):
             start_time = time.time()
 
             self.model.train()
-            train_loss = 0.0
-            train_IOU = 0.0
-            train_acc = 0.0
+            train_loss.reset()
+            train_IOU.reset()
+            train_acc.reset()
             for x, y in train_loader:
                 x = x.to(self.device, dtype=torch.float32)
-                y = y.to(self.device, dtype=torch.float32)
+                y = y.view(-1).to(self.device, dtype=torch.float32)
                 self.optimizer.zero_grad()
-                y_pred = self.model(x)
+                y_pred = self.model(x).view(-1)
                 loss = self.criterion(y_pred, y)
                 loss.backward()
                 self.optimizer.step()
-                train_loss += loss.item()
-                train_IOU += IOU(y_pred, y).item()
-                train_acc += self.metric(y_pred.view(-1), y.view(-1)).item()
-            train_loss /= train_length
-            train_IOU /= train_length
-            train_acc /= train_length
+                train_loss.update(loss.item())
+                train_IOU.update(IOU(y_pred, y).item())
+                train_acc.update(self.metric(y_pred, y).item())
 
             self.model.eval()
-            validation_loss = 0.0
-            validation_IOU = 0.0
-            validation_acc = 0.0
+            validation_loss.reset()
+            validation_IOU.reset()
+            validation_acc.reset()
             with torch.no_grad():
                 for x, y in validation_loader:
                     x = x.to(self.device, dtype=torch.float32)
-                    y = y.to(self.device, dtype=torch.float32)
-                    y_pred = self.model(x)
+                    y = y.view(-1).to(self.device, dtype=torch.float32)
+                    y_pred = self.model(x).view(-1)
                     loss = self.criterion(y_pred, y)
-                    validation_loss += loss.item()
-                    validation_IOU += IOU(y_pred, y).item()
-                    validation_acc += self.metric(y_pred.view(-1), y.view(-1)).item()
-            validation_loss /= validation_length
-            validation_IOU /= validation_length
-            validation_acc /= validation_length
+                    validation_loss.update(loss.item())
+                    validation_IOU.update(IOU(y_pred, y).item())
+                    validation_acc.update(self.metric(y_pred, y).item())
 
             duration = time.time() - start_time
             lr = self.optimizer.param_groups[0]["lr"]
@@ -149,16 +150,16 @@ class Process:
                     epochs,
                     duration,
                     lr,
-                    train_loss,
-                    train_acc,
-                    train_IOU,
-                    validation_loss,
-                    validation_acc,
-                    validation_IOU,
+                    train_loss.get_avg(),
+                    train_acc.get_avg(),
+                    train_IOU.get_avg(),
+                    validation_loss.get_avg(),
+                    validation_acc.get_avg(),
+                    validation_IOU.get_avg(),
                 )
             )
             self.logger.info(logger_msg)
-            loss_list.append(
+            msg_list.append(
                 dict(
                     [
                         string.replace(" ", "").split(":")
@@ -169,17 +170,17 @@ class Process:
                 )
             )
 
-            if validation_loss < best_loss:
+            if validation_loss.get_avg() < best_loss:
                 checkpoint_path = os.path.join(self.load_model_dir, "checkpoint.pth")
                 self.logger.info(
-                    f"Valid loss improved from {best_loss:2.4f} to {validation_loss:2.4f}. Saving checkpoint: {checkpoint_path}"
+                    f"Valid loss improved from {best_loss:2.4f} to {validation_loss.get_avg():2.4f}. Saving checkpoint: {checkpoint_path}"
                 )
-                best_loss = validation_loss
+                best_loss = validation_loss.get_avg()
                 torch.save(self.model.state_dict(), checkpoint_path)
 
             self.scheduler.step()
 
-        df = pd.DataFrame(loss_list)
+        df = pd.DataFrame(msg_list)
         df.to_csv(loss_csv, encoding="utf8", index=False)
         torch.save(
             self.model.state_dict, os.path.join(self.load_model_dir, "model.pth")

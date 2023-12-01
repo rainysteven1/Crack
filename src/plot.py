@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -67,14 +68,15 @@ def plot_metrics(loss_csv, figure_path):
     plt.savefig(figure_path)
 
 
-def visualize(data_dict, index, figure_path):
+def visualize(data_dict, indices, figure_path):
     _, axes = plt.subplots(1, 3, figsize=(13, 4))
-    for idx, (key, value) in enumerate(data_dict.items()):
-        axes[idx].imshow(
-            np.transpose(value["data"][index], (1, 2, 0)),
-            cmap="gray" if value["is_gray"] else "viridis",
-        )
-        axes[idx].axis("off")
-        axes[idx].set_title(f"[{key}]", loc="center")
-    plt.tight_layout()
-    plt.savefig(figure_path)
+    for index in indices:
+        for idx, (key, value) in enumerate(data_dict.items()):
+            axes[idx].imshow(
+                np.transpose(value["data"][index], (1, 2, 0)),
+                cmap="gray" if value["is_gray"] else "viridis",
+            )
+            axes[idx].axis("off")
+            axes[idx].set_title(f"[{key}]", loc="center")
+        plt.tight_layout()
+        plt.savefig(os.path.join(figure_path, f"result_{index}.png"))

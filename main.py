@@ -131,6 +131,6 @@ if __name__ == "__main__":
         )
         visualize(
             data_dict,
-            0,
-            os.path.join(working_dir, "figure", "result.png"),
+            list(range(10)),
+            os.path.join(working_dir, "figure"),
         )
