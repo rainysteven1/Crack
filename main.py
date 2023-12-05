@@ -4,10 +4,12 @@ from jsonschema import validate
 
 sys.path.insert(0, "./src")
 
+from src import DEVICE, GPU_NAME
 from src.core import MODEL_DICT
 from src.logger import LoggerFactory, init_file_handler
 from src.plot import *
-from src.process import Process
+from src.train import train
+from src.predict import predict
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FOLDER = os.path.join(CURRENT_DIR, "resources/config")
@@ -84,16 +86,17 @@ if __name__ == "__main__":
     logger_factory = LoggerFactory()
     file_handler = init_file_handler("%s/log/log_%s.log" % (working_dir, args.state))
     logger_factory.add_file_handler(file_handler)
+    logger = logger_factory.logger
 
-    def logger_basic(process):
-        process.logger.info("Start time: " + str_start_time)
-        process.logger.info("Using {} device".format(process.device))
-        process.logger.info("GPU: {}".format(process.gpu_name))
-        process.logger.info("Running platform: " + running_platform)
-        process.logger.info("Running state: " + args.state)
-        process.logger.info("File directory: " + file_dir)
-        process.logger.info("Working directory: " + str(working_dir))
-        process.logger.info(args)
+    def logger_basic():
+        logger.info("Start time: " + str_start_time)
+        logger.info("Using {} device".format(DEVICE))
+        logger.info("GPU: {}".format(GPU_NAME))
+        logger.info("Running platform: " + running_platform)
+        logger.info("Running state: " + args.state)
+        logger.info("File directory: " + file_dir)
+        logger.info("Working directory: " + str(working_dir))
+        logger.info(args)
 
     path_dict = dict()
     for category in data_path["category_list"]:
@@ -105,25 +108,20 @@ if __name__ == "__main__":
                 for file_name in sorted(os.listdir(folder))
             ]
 
+    model_category = args.category
+
     if args.state == "train":
         load_model_dir = f"{working_dir}/model"
-        process = Process(
-            3,
-            1,
-            logger=logger_factory.logger,
-            category=args.category,
-            load_model_dir=load_model_dir,
-            **data_attributes,
-        )
-        logger_basic(process)
-
         loss_csv = os.path.join(working_dir, "log", "log_train.csv")
-        process.train(
+        logger_basic()
+        train(
+            logger,
+            model_category,
+            load_model_dir,
             path_dict,
-            train_settings["batch_size"],
-            train_settings["N_epochs"],
-            train_settings["train_split"],
             loss_csv,
+            data_attributes,
+            train_settings,
         )
         plot_loss(loss_csv, os.path.join(working_dir, "figure", "loss.png"))
         plot_metrics(loss_csv, os.path.join(working_dir, "figure", "metrics.png"))
@@ -133,18 +131,15 @@ if __name__ == "__main__":
             working_dir,
             "checkpoint" if best_last == "best" else "model",
         )
-        process = Process(
-            3,
-            1,
-            logger=logger_factory.logger,
-            category=args.category,
-            load_model_dir=load_model_dir,
-            **data_attributes,
-        )
-        logger_basic(process)
+        logger_basic()
 
-        data_dict = process.predict(
-            path_dict, test_settings["batch_size"], test_settings["metrics_mode"]
+        data_dict = predict(
+            logger,
+            model_category,
+            load_model_dir,
+            path_dict,
+            data_attributes,
+            test_settings,
         )
         if "data" in data_dict["Prediction"]:
             visualize(
