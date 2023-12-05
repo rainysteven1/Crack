@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Configruation",
+  "type": "object",
+  "properties": {
+    "data path": {
+      "type": "object",
+      "properties": {
+        "data_path": {
+          "type": "string"
+        },
+        "category_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "img_dir_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["data_path", "category_list", "img_dir_list"]
+    },
+    "data attributes": {
+      "type": "object",
+      "properties": {
+        "batch_height": {
+          "type": "integer"
+        },
+        "batch_width": {
+          "type": "integer"
+        }
+      },
+      "required": ["batch_height", "batch_width"]
+    },
+    "train settings": {
+      "type": "object",
+      "properties": {
+        "batch_size": {
+          "type": "integer"
+        },
+        "N_epochs": {
+          "type": "integer"
+        },
+        "train_split": {
+          "type": "integer"
+        }
+      },
+      "required": ["batch_size", "N_epochs", "train_split"]
+    },
+    "test settings": {
+      "type": "object",
+      "properties": {
+        "best_last": {
+          "type": "string"
+        },
+        "batch_size": {
+          "type": "integer"
+        },
+        "metrics_mode": {
+          "type": "string"
+        }
+      },
+      "required": ["best_last", "batch_size", "metrics_mode"]
+    },
+    "result settings": {
+      "type": "object",
+      "properties": {
+        "folder_list": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["folder_list"]
+    }
+  },
+  "required": [
+    "data path",
+    "data attributes",
+    "train settings",
+    "test settings",
+    "result settings"
+  ]
+}

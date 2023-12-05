@@ -1,5 +1,6 @@
 import sys, os, argparse, pathlib, platform, shutil, time
 import ujson
+from jsonschema import validate
 
 sys.path.insert(0, "./src")
 
@@ -9,7 +10,9 @@ from src.plot import *
 from src.process import Process
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(CURRENT_DIR, "resources/config/configuration.json")
+CONFIG_FOLDER = os.path.join(CURRENT_DIR, "resources/config")
+CONFIG_PATH = os.path.join(CONFIG_FOLDER, "configuration.json")
+CONFIG_SCHEMA_PATH = os.path.join(CONFIG_FOLDER, "configuration_schema.json")
 
 
 def parse_args():
@@ -48,6 +51,9 @@ if __name__ == "__main__":
     args = parse_args()
     with open(CONFIG_PATH, "r") as file:
         config = ujson.load(file)
+    with open(CONFIG_SCHEMA_PATH, "r") as file:
+        config_schema = ujson.load(file)
+    validate(config, config_schema)
     data_path = config["data path"]
     data_attributes = config["data attributes"]
     train_settings = config["train settings"]
