@@ -11,7 +11,7 @@ if [ "$(docker image inspect "$image_name" 2>/dev/null)" = "[]" ]; then
     docker buildx build -t "$image_name" "$PWD"
 else
     if docker ps -a --format "{{.Names}}" | grep -qw "$container_name"; then
-        docker stop "$container_name" && docker rm "$container_name"
+        docker stop "$container_name"
     fi
 fi
 

@@ -80,3 +80,27 @@ def visualize(data_dict, indices, figure_path):
             axes[idx].set_title(f"[{key}]", loc="center")
         plt.tight_layout()
         plt.savefig(os.path.join(figure_path, f"result_{index}.png"))
+
+
+def visualize_dict(data_dict, indices, figure_path):
+    _, axes = plt.subplots(1, 4, figsize=(10, 4))
+    for index in indices:
+        for idx, (key, value) in enumerate(data_dict.items()):
+            if "data" in value:
+                axes[idx].imshow(
+                    np.transpose(value["data"][index], (1, 2, 0)),
+                    cmap="gray" if value["is_gray"] else "viridis",
+                )
+                axes[idx].axis("off")
+                axes[idx].set_title(f"[{key}]", loc="center")
+            else:
+                for item in value.items():
+                    axes[idx].imshow(
+                        np.transpose(item[1]["data"][index], (1, 2, 0)),
+                        cmap="gray" if item[1]["is_gray"] else "viridis",
+                    )
+                    axes[idx].axis("off")
+                    axes[idx].set_title(f"[{item[0]}]", loc="center")
+                    idx += 1
+        plt.tight_layout()
+        plt.savefig(os.path.join(figure_path, f"result_{index}.png"))

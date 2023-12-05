@@ -13,11 +13,9 @@ from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 
 from src import DEVICE, GPU_NAME
 from dataset import CrackDataset
-from core.losses import DiceLoss
+from core.losses import DiceLoss, BCEDiceLoss
 from core.metrics import IOU, MetricTracker
-from core.unet import *
-from core.resunet import *
-from core.resunet_pp import *
+from core import MODEL_DICT
 
 
 def lr_schedule(epoch):
@@ -33,6 +31,28 @@ def lr_schedule(epoch):
     return scale_factor
 
 
+class MetricRecord:
+    def __init__(self) -> None:
+        self.loss = MetricTracker()
+        self.IOU = MetricTracker()
+        self.acc = MetricTracker()
+
+        self.reset()
+
+    def reset(self):
+        self.loss.reset()
+        self.IOU.reset()
+        self.acc.reset()
+
+    def update(self, loss, IOU, acc, n=1):
+        self.loss.update(loss, n)
+        self.IOU.update(IOU, n)
+        self.acc.update(acc, n)
+
+    def get_metrics(self):
+        return [self.loss.get_avg(), self.acc.get_avg(), self.IOU.get_avg()]
+
+
 class Process:
     def __init__(
         self,
@@ -41,6 +61,7 @@ class Process:
         batch_height: int,
         batch_width: int,
         logger: logging.Logger,
+        category: str,
         load_model_dir: str = "",
     ) -> None:
         self.device = DEVICE
@@ -53,12 +74,14 @@ class Process:
         self.batch_height = batch_height
         self.batch_width = batch_width
 
-        self.model = ResUNetPlusPlus(self.input_dim, self.output_dim).to(DEVICE)
+        self.model = MODEL_DICT.get(category)(self.input_dim, self.output_dim).to(
+            DEVICE
+        )
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.0035, eps=1e-7, amsgrad=True
         )
         self.scheduler = LambdaLR(self.optimizer, lr_schedule, verbose=True)
-        self.criterion = DiceLoss()
+        self.criterion = BCEDiceLoss()
         self.metric = BinaryAccuracy().to(DEVICE)
 
     def train(
@@ -98,12 +121,8 @@ class Process:
         self.logger.info("number of train data batch: %d" % train_length)
         self.logger.info("number of validation data batch: %d" % validation_length)
 
-        train_loss = MetricTracker()
-        train_IOU = MetricTracker()
-        train_acc = MetricTracker()
-        validation_loss = MetricTracker()
-        validation_IOU = MetricTracker()
-        validation_acc = MetricTracker()
+        train_metric_record = MetricRecord()
+        validation_metric_record = MetricRecord()
 
         best_loss = float("inf")
         msg_list = list()
@@ -112,9 +131,7 @@ class Process:
             start_time = time.time()
 
             self.model.train()
-            train_loss.reset()
-            train_IOU.reset()
-            train_acc.reset()
+            train_metric_record.reset()
             for x, y in train_loader:
                 x = x.to(self.device, dtype=torch.float32)
                 y = y.view(-1).to(self.device, dtype=torch.float32)
@@ -123,23 +140,23 @@ class Process:
                 loss = self.criterion(y_pred, y)
                 loss.backward()
                 self.optimizer.step()
-                train_loss.update(loss.item())
-                train_IOU.update(IOU(y_pred, y).item())
-                train_acc.update(self.metric(y_pred, y).item())
+                train_metric_record.update(
+                    loss.item(), IOU(y_pred, y).item(), self.metric(y_pred, y).item()
+                )
 
             self.model.eval()
-            validation_loss.reset()
-            validation_IOU.reset()
-            validation_acc.reset()
+            validation_metric_record.reset()
             with torch.no_grad():
                 for x, y in validation_loader:
                     x = x.to(self.device, dtype=torch.float32)
                     y = y.view(-1).to(self.device, dtype=torch.float32)
                     y_pred = self.model(x).view(-1)
                     loss = self.criterion(y_pred, y)
-                    validation_loss.update(loss.item())
-                    validation_IOU.update(IOU(y_pred, y).item())
-                    validation_acc.update(self.metric(y_pred, y).item())
+                    validation_metric_record.update(
+                        loss.item(),
+                        IOU(y_pred, y).item(),
+                        self.metric(y_pred, y).item(),
+                    )
 
             duration = time.time() - start_time
             lr = self.optimizer.param_groups[0]["lr"]
@@ -150,12 +167,8 @@ class Process:
                     epochs,
                     duration,
                     lr,
-                    train_loss.get_avg(),
-                    train_acc.get_avg(),
-                    train_IOU.get_avg(),
-                    validation_loss.get_avg(),
-                    validation_acc.get_avg(),
-                    validation_IOU.get_avg(),
+                    *train_metric_record.get_metrics(),
+                    *validation_metric_record.get_metrics(),
                 )
             )
             self.logger.info(logger_msg)
@@ -170,12 +183,13 @@ class Process:
                 )
             )
 
-            if validation_loss.get_avg() < best_loss:
+            validation_loss = validation_metric_record.get_metrics()[0]
+            if validation_loss < best_loss:
                 checkpoint_path = os.path.join(self.load_model_dir, "checkpoint.pth")
                 self.logger.info(
-                    f"Valid loss improved from {best_loss:2.4f} to {validation_loss.get_avg():2.4f}. Saving checkpoint: {checkpoint_path}"
+                    f"Valid loss improved from {best_loss:2.4f} to {validation_loss:2.4f}. Saving checkpoint: {checkpoint_path}"
                 )
-                best_loss = validation_loss.get_avg()
+                best_loss = validation_loss
                 torch.save(self.model.state_dict(), checkpoint_path)
 
             self.scheduler.step()
@@ -244,13 +258,17 @@ class Process:
                 y_true_all = torch.cat((y_true_all, y), dim=0)
                 y_pred_all = torch.cat((y_pred_all, y_pred), dim=0)
 
+        def log_process(function):
+            self.logger.info("Metric(Prediction):")
+            function(y_true_all, y_pred_all)
+
         if calulate_metrics_mode == "gpu":
-            self.calculate_test_metrics_gpu(y_true_all, y_pred_all)
+            log_process(self.calculate_test_metrics_gpu)
         x_all = x_all.detach().cpu().numpy()
         y_true_all = y_true_all.detach().cpu().numpy()
         y_pred_all = y_pred_all.detach().cpu().numpy()
         if calulate_metrics_mode == "cpu":
-            self.calculate_test_metrics_cpu(y_true_all, y_pred_all)
+            log_process(self.calculate_test_metrics_cpu)
 
         duration = time.time() - start_time
         self.logger.info("Duration - %ds" % (duration))

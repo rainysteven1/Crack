@@ -3,6 +3,7 @@ import ujson
 
 sys.path.insert(0, "./src")
 
+from src.core import MODEL_DICT
 from src.logger import LoggerFactory, init_file_handler
 from src.plot import *
 from src.process import Process
@@ -12,15 +13,23 @@ CONFIG_PATH = os.path.join(CURRENT_DIR, "resources/config/configuration.json")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Allen Cahn")
-    parser.add_argument(
+    parser = argparse.ArgumentParser(description="Crack")
+    model_parser = parser.add_argument_group("Model Options")
+    model_parser.add_argument(
         "--state",
         type=str,
         default="train",
         choices=["train", "predict"],
         help="running state",
     )
-    parser.add_argument(
+    model_parser.add_argument(
+        "--category",
+        type=str,
+        default="unet",
+        choices=MODEL_DICT.keys(),
+        help="running model",
+    )
+    model_parser.add_argument(
         "--load_model_dir",
         type=str,
         default="",
@@ -96,6 +105,7 @@ if __name__ == "__main__":
             3,
             1,
             logger=logger_factory.logger,
+            category=args.category,
             load_model_dir=load_model_dir,
             **data_attributes,
         )
@@ -121,6 +131,7 @@ if __name__ == "__main__":
             3,
             1,
             logger=logger_factory.logger,
+            category=args.category,
             load_model_dir=load_model_dir,
             **data_attributes,
         )
