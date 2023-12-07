@@ -1,6 +1,5 @@
 from .unet import *
 from .resunet import *
-from .resunet_pp import *
 
 MODEL_DICT = {
     "unet": UNet,

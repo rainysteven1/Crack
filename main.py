@@ -13,7 +13,6 @@ from src.predict import predict
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FOLDER = os.path.join(CURRENT_DIR, "resources/config")
-CONFIG_PATH = os.path.join(CONFIG_FOLDER, "configuration.json")
 CONFIG_SCHEMA_PATH = os.path.join(CONFIG_FOLDER, "configuration_schema.json")
 
 
@@ -52,8 +51,9 @@ def delete_pycache(folder_path):
 if __name__ == "__main__":
     args = parse_args()
     model_category = args.category
+    config_path = os.path.join(CONFIG_FOLDER, f"{model_category}.json")
 
-    with open(CONFIG_PATH, "r") as file:
+    with open(config_path, "r") as file:
         config = ujson.load(file)
     with open(CONFIG_SCHEMA_PATH, "r") as file:
         config_schema = ujson.load(file)
@@ -78,7 +78,7 @@ if __name__ == "__main__":
         working_dir = str(working_dir)
         shutil.copy(__file__, f"{working_dir}/code")
         shutil.copytree(f"{file_dir}/src", f"{working_dir}/code/src")
-        shutil.copy(CONFIG_PATH, f"{working_dir}/config")
+        shutil.copy(config_path, f"{working_dir}/config")
         delete_pycache(f"{working_dir}/code/src")
     elif args.state == "predict" and args.load_model_dir != "":
         working_dir = (
