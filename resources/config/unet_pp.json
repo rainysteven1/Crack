@@ -9,20 +9,23 @@
     "batch_width": 256
   },
   "train settings": {
-    "batch_size": 16,
-    "N_epochs": 500,
+    "batch_size": 4,
+    "N_epochs": 100,
     "train_split": 1500,
-    "criterion": "BCEDiceLoss",
+    "criterion": "BCELoss",
     "optimizer": {
-      "name": "Adam",
-      "lr": 1e-4
+      "name": "SGD",
+      "lr": 1e-3,
+      "momentum": 0.9,
+      "weight_decay": 1e-4,
+      "nesterov": false
     },
     "scheduler": {
-      "name": "ReduceLROnPlateau",
-      "mode": "min",
-      "patience": 5
+      "name": "CosineAnnealingLR",
+      "T_max": 100,
+      "eta_min": 1e-5
     },
-    "early_stopping_patience": 50
+    "early_stopping_patience": -1
   },
   "test settings": {
     "best_last": "best",

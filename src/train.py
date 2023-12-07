@@ -5,22 +5,31 @@ import torch
 
 from logging import Logger
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR, ReduceLROnPlateau
 from torchmetrics.classification import BinaryAccuracy
 
 from src import DEVICE
 from .core.losses import *
 from .core.metrics import IOU
 from .dataset import CrackDataset
-from .utils import build_model, log_model_summary, MetricTracker
+from .utils import *
 
 OPTIMIZER_DICT = {
     "Adam": torch.optim.Adam,
     "NAdam": torch.optim.NAdam,
+    "RMSprop": torch.optim.RMSprop,
     "SGD": torch.optim.SGD,
 }
-SCHEDULER_DICT = {"LambdaLR": LambdaLR, "ReduceLROnPlateau": ReduceLROnPlateau}
-CRITERION_DICT = {"DiceLoss": DiceLoss, "BCEDiceLoss": BCEDiceLoss}
+SCHEDULER_DICT = {
+    "LambdaLR": LambdaLR,
+    "CosineAnnealingLR": CosineAnnealingLR,
+    "ReduceLROnPlateau": ReduceLROnPlateau,
+}
+CRITERION_DICT = {
+    "BCELoss": nn.BCELoss,
+    "DiceLoss": DiceLoss,
+    "BCEDiceLoss": BCEDiceLoss,
+}
 
 input_dim = 3
 
@@ -45,19 +54,6 @@ class MetricRecord:
 
     def get_metrics(self):
         return [self.loss.get_avg(), self.acc.get_avg(), self.IOU.get_avg()]
-
-
-def lr_schedule(epoch):
-    scale_factor = 1
-    if epoch > 150:
-        scale_factor *= 2 ** (-1)
-    elif epoch > 80:
-        scale_factor *= 2 ** (-1)
-    elif epoch > 50:
-        scale_factor *= 2 ** (-1)
-    elif epoch > 30:
-        scale_factor *= 2 ** (-1)
-    return scale_factor
 
 
 def train(
@@ -89,10 +85,12 @@ def train(
         **data_attributes,
         is_augment=False,
     )
-    train_loader = DataLoader(train_dataset, batch_size, num_workers=1, pin_memory=True)
+    train_loader = DataLoader(
+        train_dataset, batch_size, shuffle=True, num_workers=1, pin_memory=True
+    )
 
     validation_loader = DataLoader(
-        validation_dataset, batch_size, num_workers=1, pin_memory=True
+        validation_dataset, batch_size, shuffle=False, num_workers=1, pin_memory=True
     )
     train_length = len(train_loader)
     validation_length = len(validation_loader)
@@ -120,17 +118,20 @@ def train(
     msg_list = list()
     # scheduler
     scheduler = None
+    lr_lambda_dict = {
+        "lr_schedule1": lr_schedule1,
+        "lr_schedule2": lr_schedule2(epochs),
+    }
     if "name" in train_settings["scheduler"]:
         scheduler_class = SCHEDULER_DICT.get(train_settings["scheduler"]["name"])
         del train_settings["scheduler"]["name"]
         if scheduler_class == LambdaLR:
-            scheduler = LambdaLR(optimizer, lr_schedule)
+            lr_lambda = lr_lambda_dict.get(train_settings["scheduler"]["lr_lambda"])
+            scheduler = LambdaLR(optimizer, lr_lambda)
         else:
-            early_stopping_patience = train_settings["scheduler"][
-                "early_stopping_patience"
-            ]
-            del train_settings["scheduler"]["early_stopping_patience"]
-            scheduler = ReduceLROnPlateau(optimizer, **train_settings["scheduler"])
+            scheduler = scheduler_class(optimizer, **train_settings["scheduler"])
+    # early stopping
+    early_stopping_patience = train_settings["early_stopping_patience"]
 
     for epoch in range(1, epochs + 1):
         start_time = time.time()
@@ -141,8 +142,16 @@ def train(
             x = x.to(DEVICE, dtype=torch.float32)
             y = y.view(-1).to(DEVICE, dtype=torch.float32)
             optimizer.zero_grad()
-            y_pred = model(x).view(-1)
-            loss = criterion(y_pred, y)
+            y_pred = model(x)
+            if not isinstance(y_pred, list):
+                y_pred = y_pred.view(-1)
+                loss = criterion(y_pred, y)
+            else:
+                loss = 0
+                for output in y_pred:
+                    loss += criterion(output.view(-1), y)
+                loss /= len(y_pred)
+                y_pred = y_pred[-1].view(-1)
             loss.backward()
             optimizer.step()
             train_metric_record.update(
@@ -155,8 +164,16 @@ def train(
             for x, y in validation_loader:
                 x = x.to(DEVICE, dtype=torch.float32)
                 y = y.view(-1).to(DEVICE, dtype=torch.float32)
-                y_pred = model(x).view(-1)
-                loss = criterion(y_pred, y)
+                y_pred = model(x)
+                if not isinstance(y_pred, list):
+                    y_pred = y_pred.view(-1)
+                    loss = criterion(y_pred, y)
+                else:
+                    loss = 0
+                    for output in y_pred:
+                        loss += criterion(output.view(-1), y)
+                    loss /= len(y_pred)
+                    y_pred = y_pred[-1].view(-1)
                 validation_metric_record.update(
                     loss.item(),
                     IOU(y_pred, y).item(),
@@ -199,22 +216,23 @@ def train(
             return validation_loss
 
         if scheduler:
-            if isinstance(scheduler, LambdaLR):
+            if not isinstance(scheduler, ReduceLROnPlateau):
                 scheduler.step()
-                if validation_loss < best_loss:
-                    best_loss = save_best_checkpoint(best_loss)
-            elif isinstance(scheduler, ReduceLROnPlateau):
+            else:
                 scheduler.step(validation_loss)
-                if validation_loss < best_loss:
-                    best_loss = save_best_checkpoint(best_loss)
-                    early_stopping_count = 0
-                else:
-                    early_stopping_count += 1
-                if early_stopping_count == early_stopping_patience:
-                    logger.info(
-                        f"Early stopping: validation loss stops improving from last {early_stopping_patience} continously"
-                    )
-                    break
+
+        early_stopping_count += 1
+        if validation_loss < best_loss:
+            best_loss = save_best_checkpoint(best_loss)
+            early_stopping_count = 0
+        if (
+            early_stopping_patience >= 0
+            and early_stopping_count == early_stopping_patience
+        ):
+            logger.info(
+                f"Early stopping: validation loss stops improving from last {early_stopping_patience} continously"
+            )
+            break
 
     df = pd.DataFrame(msg_list)
     df.to_csv(loss_csv, encoding="utf8", index=False)

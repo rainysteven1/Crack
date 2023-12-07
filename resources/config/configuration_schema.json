@@ -48,9 +48,10 @@
         "train_split": {
           "type": "integer"
         },
+
         "criterion": {
           "type": "string",
-          "enum": ["DiceLoss", "BCEDiceLoss"]
+          "enum": ["BCELoss", "DiceLoss", "BCEDiceLoss"]
         },
         "optimizer": {
           "anyOf": [
@@ -71,7 +72,29 @@
                   "type": "boolean"
                 }
               },
-              "required": ["name", "lr"]
+              "required": ["name"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "const": "SGD"
+                },
+                "lr": {
+                  "type": "number"
+                },
+                "momentum": {
+                  "type": "number"
+                },
+                "weight_decay": {
+                  "type": "number"
+                },
+                "nesterov": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["name"]
             }
           ]
         },
@@ -80,24 +103,44 @@
             {
               "type": "object",
               "properties": {
-                "name": { "type": "string", "const": "LambdaLR" }
+                "name": { "type": "string", "const": "LambdaLR" },
+                "lr_lambda": {
+                  "type": "string",
+                  "enum": ["lr_schedule1", "lr_schedule2"]
+                }
               },
-              "required": ["name"]
+              "required": ["name", "lr_lambda"]
             },
             {
               "type": "object",
               "properties": {
                 "name": { "type": "string", "const": "ReduceLROnPlateau" },
                 "mode": { "type": "string", "enum": ["max", "min"] },
-                "patience": { "type": "integer" },
-                "early_stopping_count": { "type": "integer" }
+                "patience": { "type": "integer" }
               },
-              "required": ["name", "patience"]
+              "required": ["name"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "const": "CosineAnnealingLR" },
+                "T_max": { "type": "integer" },
+                "eta_min": { "type": "number" }
+              },
+              "required": ["name"]
             }
           ]
-        }
+        },
+        "early_stopping_patience": { "type": "integer" }
       },
-      "required": ["batch_size", "N_epochs", "train_split"]
+      "required": [
+        "batch_size",
+        "N_epochs",
+        "train_split",
+        "criterion",
+        "optimizer",
+        "early_stopping_patience"
+      ]
     },
     "test settings": {
       "type": "object",

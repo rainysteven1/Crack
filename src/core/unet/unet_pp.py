@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from .common import ConvBlock, EncoderBlock
-from ..modules import Conv2dSame, InitModule
+from ..modules import Conv2dSame, OutputBlock, InitModule
 
 
 class DecoderBlock(InitModule):
@@ -45,10 +45,12 @@ class UNet2Plus(InitModule):
         self,
         input_dim,
         output_dim,
-        filters=[64, 128, 256, 512, 1024],
+        filters=[32, 64, 128, 256, 512],
         init_type="kaiming",
+        is_ds=True,
     ) -> None:
         super().__init__(init_type)
+        self.is_ds = is_ds
 
         # Encoder
         self.input_layer = ConvBlock(input_dim, filters[0], init_type=init_type)
@@ -72,14 +74,17 @@ class UNet2Plus(InitModule):
 
         self.d04 = DecoderBlock(filters[1], filters[0], N_concat=5)
 
-        # Output
-        self.final_1 = Conv2dSame(filters[0], output_dim, kernel_size=1, padding="same")
-        self.final_2 = Conv2dSame(filters[0], output_dim, kernel_size=1, padding="same")
-        self.final_3 = Conv2dSame(filters[0], output_dim, kernel_size=1, padding="same")
-        self.final_4 = Conv2dSame(filters[0], output_dim, kernel_size=1, padding="same")
+        def final_block():
+            return OutputBlock(filters[0], output_dim, init_type=init_type)
 
-        if self.init_type:
-            self._initialize_weights()
+        # Output
+        if self.is_ds:
+            self.final1 = final_block()
+            self.final2 = final_block()
+            self.final3 = final_block()
+            self.final4 = final_block()
+        else:
+            self.final = final_block()
 
     def forward(self, input):
         # Encoder
@@ -104,16 +109,12 @@ class UNet2Plus(InitModule):
 
         x04 = self.d04(x13, x00, x01, x02, x03)
 
-        x1 = self.final_1(x01)
-        x2 = self.final_2(x02)
-        x3 = self.final_3(x03)
-        x4 = self.final_4(x04)
-        x5 = (x1 + x2 + x3 + x4) / 4
-
-        output = torch.sigmoid(x5)
+        if self.is_ds:
+            x1 = self.final1(x01)
+            x2 = self.final2(x02)
+            x3 = self.final3(x03)
+            x4 = self.final4(x04)
+            output = [x1, x2, x3, x4]
+        else:
+            output = self.final(x04)
         return output
-
-    def _initialize_weights(self):
-        for module in self.modules():
-            if isinstance(module, Conv2dSame):
-                self.init(module)

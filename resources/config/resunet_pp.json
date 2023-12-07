@@ -20,8 +20,10 @@
       "amsgrad": true
     },
     "scheduler": {
-      "name": "LambdaLR"
-    }
+      "name": "LambdaLR",
+      "lr_lambda": "lr_schedule1"
+    },
+    "early_stopping_patience": -1
   },
   "test settings": {
     "best_last": "best",

@@ -1,4 +1,4 @@
-import io, sys
+import io, math, sys
 import torch
 
 from logging import Logger
@@ -55,3 +55,24 @@ def log_model_summary(
 
 def build_model(category: str):
     return MODEL_DICT.get(category)(input_dim=3, output_dim=1).to(DEVICE)
+
+
+def lr_schedule1(epoch):
+    scale_factor = 1
+    if epoch > 150:
+        scale_factor *= 2 ** (-1)
+    elif epoch > 80:
+        scale_factor *= 2 ** (-1)
+    elif epoch > 50:
+        scale_factor *= 2 ** (-1)
+    elif epoch > 30:
+        scale_factor *= 2 ** (-1)
+    return scale_factor
+
+
+# https://arxiv.org/pdf/1812.01187.pdf
+def lr_schedule2(epochs):
+    return (
+        lambda epoch: (((1 + math.cos(epoch * math.pi / epochs)) / 2) ** 1.0) * 0.95
+        + 0.05
+    )

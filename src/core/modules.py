@@ -107,26 +107,6 @@ class RedisualBlock(nn.Module):
         return torch.add(self.conv_block(x), self.skip_block(x))
 
 
-class OutputBlock(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, is_bn: bool = False) -> None:
-        super().__init__()
-        self.layers = (
-            nn.Sequential(
-                Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
-                nn.Sigmoid(),
-            )
-            if not is_bn
-            else nn.Sequential(
-                Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
-                nn.BatchNorm2d(output_dim),
-                nn.Sigmoid(),
-            )
-        )
-
-    def forward(self, input):
-        return self.layers(input)
-
-
 class SqueezeExciteBlock(nn.Module):
     def __init__(self, filters: int, radio: int = 8) -> None:
         super().__init__()
@@ -329,3 +309,35 @@ class InitModule(nn.Module):
 
     def _initialize_weights(self):
         pass
+
+
+class OutputBlock(InitModule):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        is_bn: bool = False,
+        init_type: Union[str, None] = None,
+    ) -> None:
+        super().__init__(init_type)
+        self.layers = (
+            nn.Sequential(
+                Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
+                nn.Sigmoid(),
+            )
+            if not is_bn
+            else nn.Sequential(
+                Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
+                nn.BatchNorm2d(output_dim),
+                nn.Sigmoid(),
+            )
+        )
+
+        if self.init_type:
+            self._initialize_weights()
+
+    def forward(self, input):
+        return self.layers(input)
+
+    def _initialize_weights(self):
+        self.layers.apply(lambda m: self.init(m))
