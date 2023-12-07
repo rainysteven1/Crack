@@ -90,6 +90,7 @@ def train(
         is_augment=False,
     )
     train_loader = DataLoader(train_dataset, batch_size, num_workers=1, pin_memory=True)
+
     validation_loader = DataLoader(
         validation_dataset, batch_size, num_workers=1, pin_memory=True
     )

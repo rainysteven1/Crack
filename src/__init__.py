@@ -5,11 +5,7 @@ import seaborn as sns
 
 sns.set()
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-GPU_ID = "0"
-os.environ["CUDA_VISIBLE_DEVICES"] = GPU_ID
-
-SEED = 10
+SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)

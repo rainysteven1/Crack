@@ -5,7 +5,7 @@ CONFIG_PATH="$CONFIG_FOLDER/configuration.json"
 CRACK500_PATH="resources/data/crack500"
 
 workspace_dir=$1
-category="double_unet"
+category=$2
 
 cd $workspace_dir
 

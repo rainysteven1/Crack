@@ -8,5 +8,5 @@ MODEL_DICT = {
     "resunet0": ResUNet0,
     "resunet1": ResUNet1,
     "resunet_pool": ResUNetPool,
-    "resunet++": ResUNetPlusPlus,
+    "resunet_plusplus": ResUNetPlusPlus,
 }
