@@ -1,32 +1,6 @@
 import torch
 import torch.nn as nn
-from ..modules import Conv2dSame, OutputBlock
-
-
-class BasicBlock(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        kernel_size: int,
-        stride: int,
-        padding: str | int,
-    ) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.BatchNorm2d(input_dim),
-            nn.ReLU(),
-            Conv2dSame(
-                input_dim,
-                output_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            ),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
+from ..modules import Conv2dSame, BasicBlock, OutputBlock
 
 
 class InputBlock(nn.Module):

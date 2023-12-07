@@ -1,8 +1,10 @@
 import math
 import torch
 import torch.nn as nn
-from torch.nn.common_types import _size_2_t
+import torch.nn.init as init
 import torch.nn.functional as F
+from typing import Union
+from torch.nn.common_types import _size_2_t
 
 
 class Conv2dSame(nn.Conv2d):
@@ -278,3 +280,52 @@ class ASPP_v3(nn.Module):
         x1 = torch.cat(x_list, dim=1)
         output = self.output_layer(x1)
         return output
+
+
+def init_batchNorm(module):
+    init.normal_(module.weight.data, 1.0, 0.02)
+    init.constant_(module.bias.data, 0.0)
+
+
+class InitWeights_He:
+    def __init__(self, neg_slope=0):
+        self.neg_slope = neg_slope
+
+    def __call__(self, module):
+        if isinstance(module, nn.BatchNorm2d):
+            init_batchNorm(module)
+        if isinstance(module, Conv2dSame) or isinstance(module, nn.ConvTranspose2d):
+            module.weight = init.kaiming_normal_(
+                module.weight, a=self.neg_slope, mode="fan_in"
+            )
+            if module.bias is not None:
+                module.bias = init.constant_(module.bias, 0)
+
+
+class InitWeights_XavierUniform:
+    def __init__(self, gain=1):
+        self.gain = gain
+
+    def __call__(self, module):
+        if isinstance(module, nn.BatchNorm2d):
+            init_batchNorm(module)
+        if isinstance(module, Conv2dSame) or isinstance(module, nn.ConvTranspose2d):
+            module.weight = init.xavier_uniform_(module.weight, self.gain)
+            if module.bias is not None:
+                module.bias = init.constant_(module.bias, 0)
+
+
+class InitModule(nn.Module):
+    def __init__(self, init_type: Union[str, None] = None):
+        super().__init__()
+
+        self.init_type = init_type
+
+        if self.init_type:
+            if self.init_type == "kaiming":
+                self.init = InitWeights_He()
+            elif self.init_type == "xavier":
+                self.init = InitWeights_XavierUniform()
+
+    def _initialize_weights(self):
+        pass

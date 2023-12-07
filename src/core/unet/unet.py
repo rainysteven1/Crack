@@ -1,57 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..modules import Conv2dSame, OutputBlock
-
-
-class BasicBlock(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        middle_dim: int = None,
-        kernel_size: int = 3,
-        stride: int = 1,
-        padding: str | int = 1,
-    ) -> None:
-        super().__init__()
-        if not middle_dim:
-            middle_dim = output_dim
-        self.layers = nn.Sequential(
-            Conv2dSame(
-                input_dim,
-                middle_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            ),
-            nn.BatchNorm2d(output_dim),
-            nn.ReLU(),
-            Conv2dSame(
-                middle_dim,
-                output_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            ),
-            nn.BatchNorm2d(output_dim),
-            nn.ReLU(),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
-
-
-class EncoderBlock(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.MaxPool2d(kernel_size=2),
-            BasicBlock(input_dim, output_dim),
-        )
-
-    def forward(self, x):
-        return self.layers(x)
+from .common import ConvBlock, EncoderBlock
+from ..modules import OutputBlock
 
 
 class DecoderBlock(nn.Module):
@@ -61,12 +12,12 @@ class DecoderBlock(nn.Module):
         super().__init__()
         if is_bilinear:
             self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-            self.conv = BasicBlock(input_dim, output_dim, input_dim // 2)
+            self.conv = ConvBlock(input_dim, output_dim, input_dim // 2)
         else:
             self.up = nn.ConvTranspose2d(
                 input_dim, input_dim // 2, kernel_size=2, stride=2
             )
-            self.conv = BasicBlock(input_dim, output_dim)
+            self.conv = ConvBlock(input_dim, output_dim)
 
     def forward(self, input, skip):
         x1 = self.up(input)
@@ -91,7 +42,7 @@ class UNet(nn.Module):
         factor = 2 if is_bilinear else 1
 
         # Encoder
-        self.input_layer = BasicBlock(input_dim, filters[0])
+        self.input_layer = ConvBlock(input_dim, filters[0])
         self.e1 = EncoderBlock(filters[0], filters[1])
         self.e2 = EncoderBlock(filters[1], filters[2])
         self.e3 = EncoderBlock(filters[2], filters[3])

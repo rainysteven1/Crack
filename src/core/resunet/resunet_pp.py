@@ -57,7 +57,7 @@ class DecoderBlock(nn.Module):
         return output
 
 
-class ResUNetPlusPlus(nn.Module):
+class ResUNet2Plus(nn.Module):
     def __init__(
         self, input_dim: int, output_dim: int, filters: list = [16, 32, 64, 128, 256]
     ) -> None:
