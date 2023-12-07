@@ -173,6 +173,8 @@ class DoubleUNet(nn.Module):
         )
         self.output_layer2 = OutputBlock(decoder2_output_dim, output_dim)
 
+        self.combine_output_layer = OutputBlock(2 * output_dim, output_dim)
+
     def forward(self, input):
         # Network1
         skip_list1 = self.e1(input)
@@ -188,4 +190,7 @@ class DoubleUNet(nn.Module):
         x5 = self.d2(x4, skip_list1[1:], skip_list2[1:])
         output2 = self.output_layer2(x5)
 
-        return output1, output2
+        combine_output = torch.cat((output1, output2), dim=1)
+        output = self.combine_output_layer(combine_output)
+
+        return output

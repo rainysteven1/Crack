@@ -47,6 +47,54 @@
         },
         "train_split": {
           "type": "integer"
+        },
+        "criterion": {
+          "type": "string",
+          "enum": ["DiceLoss", "BCEDiceLoss"]
+        },
+        "optimizer": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "const": "Adam"
+                },
+                "lr": {
+                  "type": "number"
+                },
+                "eps": {
+                  "type": "number"
+                },
+                "amsgrad": {
+                  "type": "boolean"
+                }
+              },
+              "required": ["name", "lr"]
+            }
+          ]
+        },
+        "scheduler": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "const": "LambdaLR" }
+              },
+              "required": ["name"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string", "const": "ReduceLROnPlateau" },
+                "mode": { "type": "string", "enum": ["max", "min"] },
+                "patience": { "type": "integer" },
+                "early_stopping_count": { "type": "integer" }
+              },
+              "required": ["name", "patience"]
+            }
+          ]
         }
       },
       "required": ["batch_size", "N_epochs", "train_split"]

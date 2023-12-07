@@ -8,9 +8,10 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import classification_report, accuracy_score, roc_auc_score
 
 from src import DEVICE
-from dataset import CrackDataset
-from core import MODEL_DICT
-from utils import log_model_summary
+from .dataset import CrackDataset
+from .utils import build_model, log_model_summary
+
+input_dim = 3
 
 
 def predict(
@@ -23,9 +24,11 @@ def predict(
 ):
     batch_size = test_settings["batch_size"]
     mode = test_settings["metrics_mode"]
-    model = MODEL_DICT.get(category)(input_dim=3, output_dim=1).to(DEVICE)
+    model = build_model(category)
     model.load_state_dict(torch.load(load_model_dir, map_location=DEVICE))
-    log_model_summary(batch_size)
+    log_model_summary(
+        logger, model, batch_size, input_dim=input_dim, device=DEVICE, **data_attributes
+    )
     logger.info(f"Loading Model State from {load_model_dir}")
 
     dataset = CrackDataset(
@@ -36,12 +39,12 @@ def predict(
     )
     loader = DataLoader(dataset, batch_size, num_workers=1, pin_memory=1)
     x_all = torch.empty(
-        [0, 3].extend(*data_attributes.values()),
+        [0, 3, *data_attributes.values()],
         device=DEVICE,
         dtype=torch.float32,
     )
     y_true_all = torch.empty(
-        (0, 1).extend(*data_attributes.values()),
+        [0, 1, *data_attributes.values()],
         device=DEVICE,
         dtype=torch.float32,
     )
@@ -64,7 +67,7 @@ def predict(
 
     def log_process(function):
         logger.info("Metric(Prediction):")
-        function(y_true_all, y_pred_all)
+        log_test_metrics(logger, *function(y_true_all, y_pred_all))
 
     if mode == "gpu":
         log_process(calculate_test_metrics_gpu)
@@ -84,7 +87,7 @@ def predict(
     }
 
 
-def calculate_test_metrics_cpu(self, y_true: np.ndarray, y_pred: np.ndarray):
+def calculate_test_metrics_cpu(y_true: np.ndarray, y_pred: np.ndarray):
     thresholds = 0.5
     yy_true = (y_true > thresholds).flatten()
     yy_pred = (y_pred > thresholds).flatten()
@@ -101,7 +104,7 @@ def calculate_test_metrics_cpu(self, y_true: np.ndarray, y_pred: np.ndarray):
     AUC = roc_auc_score(y_true.flatten(), y_pred.flatten())
     IOU = (precision * recall) / (precision + recall - precision * recall)
 
-    self.log_test_metrics(
+    return (
         accuracy,
         precision,
         recall,
@@ -114,7 +117,7 @@ def calculate_test_metrics_cpu(self, y_true: np.ndarray, y_pred: np.ndarray):
     )
 
 
-def calculate_test_metrics_gpu(self, y_true: torch.Tensor, y_pred: torch.Tensor):
+def calculate_test_metrics_gpu(y_true: torch.Tensor, y_pred: torch.Tensor):
     yy_true = torch.flatten(y_true)
     yy_pred = torch.flatten(y_pred)
 
@@ -129,15 +132,16 @@ def calculate_test_metrics_gpu(self, y_true: torch.Tensor, y_pred: torch.Tensor)
     AUC = torchmetrics.functional.auroc(yy_pred, yy_true.int(), task="binary")
     IOU = (precision * recall) / (precision + recall - precision * recall)
 
-    self.log_test_metrics(
-        accuracy.item(),
-        precision.item(),
-        recall.item(),
-        f1_score.item(),
-        sensitivity.item(),
-        specificity.item(),
-        AUC.item(),
-        IOU.item(),
+    return (
+        accuracy,
+        precision,
+        recall,
+        f1_score,
+        sensitivity,
+        specificity,
+        AUC,
+        IOU,
+        None,
     )
 
 

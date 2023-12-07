@@ -4,6 +4,9 @@ import torch
 from logging import Logger
 from torchsummary import summary
 
+from src import DEVICE
+from .core import MODEL_DICT
+
 
 # https://github.com/pytorch/examples/blob/master/imagenet/main.py
 class MetricTracker(object):
@@ -48,3 +51,7 @@ def log_model_summary(
     sys.stdout = sys.__stdout__
     summary_output = output.getvalue()
     logger.info("Model:\n{}".format(summary_output))
+
+
+def build_model(category: str):
+    return MODEL_DICT.get(category)(input_dim=3, output_dim=1).to(DEVICE)

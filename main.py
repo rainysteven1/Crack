@@ -51,6 +51,8 @@ def delete_pycache(folder_path):
 
 if __name__ == "__main__":
     args = parse_args()
+    model_category = args.category
+
     with open(CONFIG_PATH, "r") as file:
         config = ujson.load(file)
     with open(CONFIG_SCHEMA_PATH, "r") as file:
@@ -107,8 +109,6 @@ if __name__ == "__main__":
                 os.path.join(folder, file_name)
                 for file_name in sorted(os.listdir(folder))
             ]
-
-    model_category = args.category
 
     if args.state == "train":
         load_model_dir = f"{working_dir}/model"

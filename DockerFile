@@ -7,4 +7,4 @@ COPY resources/checkpoints/ /root/.cache/torch/hub/checkpoints/
 RUN apt update && apt install -y libgl1-mesa-glx libglib2.0-dev
 
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple 
-RUN pip install pandas matplotlib seaborn torchsummary ujson opencv-python albumentations torchmetrics
+RUN pip install pandas matplotlib seaborn torchsummary ujson opencv-python albumentations torchmetrics jsonschema
