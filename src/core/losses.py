@@ -20,6 +20,6 @@ class BCEDiceLoss(DiceLoss):
         super().__init__()
 
     def forward(self, y_pred, y_true):
-        bce_loss = nn.BCELoss()(y_pred, y_true).float()
+        bce_loss = nn.BCELoss(reduction="mean")(y_pred, y_true).float()
         dice_loss = super().forward(y_pred, y_true)
         return bce_loss + dice_loss

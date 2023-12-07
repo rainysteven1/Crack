@@ -5,15 +5,24 @@ import torch
 
 from logging import Logger
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 from torchmetrics.classification import BinaryAccuracy
 
 from src import DEVICE
-from core.losses import *
-from core.metrics import IOU
-from core import MODEL_DICT
-from dataset import CrackDataset
-from utils import log_model_summary, MetricTracker
+from .core.losses import *
+from .core.metrics import IOU
+from .dataset import CrackDataset
+from .utils import build_model, log_model_summary, MetricTracker
+
+OPTIMIZER_DICT = {
+    "Adam": torch.optim.Adam,
+    "NAdam": torch.optim.NAdam,
+    "SGD": torch.optim.SGD,
+}
+SCHEDULER_DICT = {"LambdaLR": LambdaLR, "ReduceLROnPlateau": ReduceLROnPlateau}
+CRITERION_DICT = {"DiceLoss": DiceLoss, "BCEDiceLoss": BCEDiceLoss}
+
+input_dim = 3
 
 
 class MetricRecord:
@@ -91,17 +100,36 @@ def train(
     train_metric_record = MetricRecord()
     validation_metric_record = MetricRecord()
 
-    model = MODEL_DICT.get(category)(input_dim=3, output_dim=1).to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0035, eps=1e-7, amsgrad=True)
-    scheduler = LambdaLR(optimizer, lr_schedule, verbose=True)
-    criterion = DiceLoss()
+    model = build_model(category)
+    # optimizer
+    optimizer_name = train_settings["optimizer"]["name"]
+    del train_settings["optimizer"]["name"]
+    optimizer = OPTIMIZER_DICT.get(optimizer_name)(
+        model.parameters(), **train_settings["optimizer"]
+    )
+    # loss and metric
+    criterion = CRITERION_DICT.get(train_settings["criterion"])()
     metric = BinaryAccuracy().to(DEVICE)
     log_model_summary(
-        logger, model, batch_size, input_dim=3, device=DEVICE, **data_attributes
+        logger, model, batch_size, input_dim=input_dim, device=DEVICE, **data_attributes
     )
 
     best_loss = float("inf")
+    early_stopping_count = 0
     msg_list = list()
+    # scheduler
+    scheduler = None
+    if "name" in train_settings["scheduler"]:
+        scheduler_class = SCHEDULER_DICT.get(train_settings["scheduler"]["name"])
+        del train_settings["scheduler"]["name"]
+        if scheduler_class == LambdaLR:
+            scheduler = LambdaLR(optimizer, lr_schedule)
+        else:
+            early_stopping_patience = train_settings["scheduler"][
+                "early_stopping_patience"
+            ]
+            del train_settings["scheduler"]["early_stopping_patience"]
+            scheduler = ReduceLROnPlateau(optimizer, **train_settings["scheduler"])
 
     for epoch in range(1, epochs + 1):
         start_time = time.time()
@@ -160,15 +188,32 @@ def train(
         )
 
         validation_loss = validation_metric_record.get_metrics()[0]
-        if validation_loss < best_loss:
+
+        def save_best_checkpoint(original_loss):
             checkpoint_path = os.path.join(load_model_dir, "checkpoint.pth")
             logger.info(
-                f"Valid loss improved from {best_loss:2.4f} to {validation_loss:2.4f}. Saving checkpoint: {checkpoint_path}"
+                f"Valid loss improved from {original_loss:2.4f} to {validation_loss:2.4f}. Saving checkpoint: {checkpoint_path}"
             )
-            best_loss = validation_loss
             torch.save(model.state_dict(), checkpoint_path)
+            return validation_loss
 
-        scheduler.step()
+        if scheduler:
+            if isinstance(scheduler, LambdaLR):
+                scheduler.step()
+                if validation_loss < best_loss:
+                    best_loss = save_best_checkpoint(best_loss)
+            elif isinstance(scheduler, ReduceLROnPlateau):
+                scheduler.step(validation_loss)
+                if validation_loss < best_loss:
+                    best_loss = save_best_checkpoint(best_loss)
+                    early_stopping_count = 0
+                else:
+                    early_stopping_count += 1
+                if early_stopping_count == early_stopping_patience:
+                    logger.info(
+                        f"Early stopping: validation loss stops improving from last {early_stopping_patience} continously"
+                    )
+                    break
 
     df = pd.DataFrame(msg_list)
     df.to_csv(loss_csv, encoding="utf8", index=False)
