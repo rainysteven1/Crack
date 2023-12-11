@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from .common import ConvBlock, EncoderBlock
+from .common import ConvBlock, Encoder
 from ..modules import Conv2dSame, OutputBlock, InitModule
 
 
@@ -9,7 +9,7 @@ class DecoderBlock(InitModule):
         self,
         input_dim: int,
         output_dim: int,
-        is_upsample: bool = False,
+        is_upsample: bool = True,
         N_concat: int = 2,
         init_type=None,
     ) -> None:
@@ -18,16 +18,26 @@ class DecoderBlock(InitModule):
             N_concat: 总合并模块数
         """
         super().__init__(init_type)
-        self.up = (
-            nn.Upsample(scale_factor=2, mode="bilinear")
-            if is_upsample
-            else nn.ConvTranspose2d(
+
+        if is_upsample:
+            self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+            self.conv = ConvBlock(
+                input_dim + (N_concat - 1) * output_dim,
+                output_dim,
+                is_batchNorm=False,
+                init_type=init_type,
+            )
+        else:
+            self.up = nn.ConvTranspose2d(
                 input_dim, output_dim, kernel_size=4, stride=2, padding=1
             )
-        )
-        self.conv = ConvBlock(
-            input_dim // 2 + (N_concat - 1) * output_dim, output_dim, is_batchNorm=False
-        )
+            self.conv = ConvBlock(
+                input_dim // 2 + (N_concat - 1) * output_dim,
+                output_dim,
+                is_batchNorm=False,
+                init_type=init_type,
+            )
+
         if self.init_type:
             self._initialize_weights()
 
@@ -41,38 +51,39 @@ class DecoderBlock(InitModule):
 
 
 class UNet2Plus(InitModule):
+    """
+    UNet++
+    """
+
     def __init__(
         self,
         input_dim,
         output_dim,
-        filters=[32, 64, 128, 256, 512],
+        filters=[64, 128, 256, 512, 1024],
         init_type="kaiming",
         is_ds=True,
     ) -> None:
         super().__init__(init_type)
+        assert len(filters) == 5
         self.is_ds = is_ds
 
         # Encoder
-        self.input_layer = ConvBlock(input_dim, filters[0], init_type=init_type)
-        self.e1 = EncoderBlock(filters[0], filters[1], init_type=init_type)
-        self.e2 = EncoderBlock(filters[1], filters[2], init_type=init_type)
-        self.e3 = EncoderBlock(filters[2], filters[3], init_type=init_type)
-        self.e4 = EncoderBlock(filters[3], filters[4], init_type=init_type)
+        self.e = Encoder(input_dim, filters, init_type=init_type)
 
         # Decoder
-        self.d01 = DecoderBlock(filters[1], filters[0])
-        self.d11 = DecoderBlock(filters[2], filters[1])
-        self.d21 = DecoderBlock(filters[3], filters[2])
-        self.d31 = DecoderBlock(filters[4], filters[3])
+        self.d01 = DecoderBlock(filters[1], filters[0], init_type=init_type)
+        self.d11 = DecoderBlock(filters[2], filters[1], init_type=init_type)
+        self.d21 = DecoderBlock(filters[3], filters[2], init_type=init_type)
+        self.d31 = DecoderBlock(filters[4], filters[3], init_type=init_type)
 
-        self.d02 = DecoderBlock(filters[1], filters[0], N_concat=3)
-        self.d12 = DecoderBlock(filters[2], filters[1], N_concat=3)
-        self.d22 = DecoderBlock(filters[3], filters[2], N_concat=3)
+        self.d02 = DecoderBlock(filters[1], filters[0], N_concat=3, init_type=init_type)
+        self.d12 = DecoderBlock(filters[2], filters[1], N_concat=3, init_type=init_type)
+        self.d22 = DecoderBlock(filters[3], filters[2], N_concat=3, init_type=init_type)
 
-        self.d03 = DecoderBlock(filters[1], filters[0], N_concat=4)
-        self.d13 = DecoderBlock(filters[2], filters[1], N_concat=4)
+        self.d03 = DecoderBlock(filters[1], filters[0], N_concat=4, init_type=init_type)
+        self.d13 = DecoderBlock(filters[2], filters[1], N_concat=4, init_type=init_type)
 
-        self.d04 = DecoderBlock(filters[1], filters[0], N_concat=5)
+        self.d04 = DecoderBlock(filters[1], filters[0], N_concat=5, init_type=init_type)
 
         def final_block():
             return OutputBlock(filters[0], output_dim, init_type=init_type)
@@ -88,11 +99,7 @@ class UNet2Plus(InitModule):
 
     def forward(self, input):
         # Encoder
-        x00 = self.input_layer(input)
-        x10 = self.e1(x00)
-        x20 = self.e2(x10)
-        x30 = self.e3(x20)
-        x40 = self.e4(x30)
+        x00, x10, x20, x30, x40 = self.e(input)
 
         # Decoder
         x01 = self.d01(x10, x00)

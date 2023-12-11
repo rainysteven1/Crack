@@ -142,16 +142,16 @@ def train(
             x = x.to(DEVICE, dtype=torch.float32)
             y = y.view(-1).to(DEVICE, dtype=torch.float32)
             optimizer.zero_grad()
-            y_pred = model(x)
-            if not isinstance(y_pred, list):
-                y_pred = y_pred.view(-1)
+            outputs = model(x)
+            if not isinstance(outputs, list):
+                y_pred = outputs.view(-1)
                 loss = criterion(y_pred, y)
             else:
                 loss = 0
-                for output in y_pred:
+                for output in outputs:
                     loss += criterion(output.view(-1), y)
-                loss /= len(y_pred)
-                y_pred = y_pred[-1].view(-1)
+                loss /= len(outputs)
+                y_pred = outputs[-1].view(-1)
             loss.backward()
             optimizer.step()
             train_metric_record.update(
@@ -172,7 +172,7 @@ def train(
                     loss = 0
                     for output in y_pred:
                         loss += criterion(output.view(-1), y)
-                    loss /= len(y_pred)
+                    loss /= len(outputs)
                     y_pred = y_pred[-1].view(-1)
                 validation_metric_record.update(
                     loss.item(),
