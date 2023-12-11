@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from .common import ConvBlock, Encoder
-from ..modules import Conv2dSame, OutputBlock, InitModule
+from ..modules import OutputBlock, InitModule
 
 
 class DecoderBlock(InitModule):
@@ -57,18 +57,18 @@ class UNet2Plus(InitModule):
 
     def __init__(
         self,
-        input_dim,
-        output_dim,
-        filters=[64, 128, 256, 512, 1024],
-        init_type="kaiming",
-        is_ds=True,
+        input_dim: int,
+        output_dim: int,
+        filters: list = [64, 128, 256, 512, 1024],
+        is_ds: bool = True,
+        init_type: str | None = "kaiming",
     ) -> None:
         super().__init__(init_type)
         assert len(filters) == 5
         self.is_ds = is_ds
 
         # Encoder
-        self.e = Encoder(input_dim, filters, init_type=init_type)
+        self.e = Encoder(input_dim, filters, init_type)
 
         # Decoder
         self.d01 = DecoderBlock(filters[1], filters[0], init_type=init_type)

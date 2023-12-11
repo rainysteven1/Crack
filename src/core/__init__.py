@@ -3,6 +3,7 @@ from .resunet import *
 
 MODEL_DICT = {
     "attention_unet": AttentionUNet,
+    "attention_unet_pp": AttentionUNet2Plus,
     "double_unet": DoubleUNet,
     "unet": UNet,
     "unet_pp": UNet2Plus,

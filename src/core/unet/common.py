@@ -117,7 +117,7 @@ class Encoder(nn.Module):
         return x_list
 
 
-class AttentionGate(nn.Module):
+class AttentionBlock(nn.Module):
     """
     Soft Attention
     """
