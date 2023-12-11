@@ -1,20 +1,16 @@
 import torch
 import torch.nn as nn
 from torchvision.models import vgg19, VGG19_Weights
-from ..modules import Conv2dSame, ASPP_v3, SqueezeExciteBlock, OutputBlock
+from .common import ConvBlock
+from ..modules import ASPP_v3, SqueezeExciteBlock, OutputBlock
 
 
-class ConvBlock(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int) -> None:
+class ConvBlock1(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int, init_type=None) -> None:
         super().__init__()
 
         self.layers = nn.Sequential(
-            Conv2dSame(input_dim, output_dim, kernel_size=3, padding="same"),
-            nn.BatchNorm2d(output_dim),
-            nn.ReLU(),
-            Conv2dSame(output_dim, output_dim, kernel_size=3, padding="same"),
-            nn.BatchNorm2d(output_dim),
-            nn.ReLU(),
+            ConvBlock(input_dim, output_dim, padding="same", init_type=init_type),
             SqueezeExciteBlock(output_dim),
         )
 
@@ -27,7 +23,7 @@ class DecoderBlock1(nn.Module):
         super().__init__()
 
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
-        self.conv_block = ConvBlock(input_dim + skip_dim, output_dim)
+        self.conv_block = ConvBlock1(input_dim + skip_dim, output_dim)
 
     def forward(self, input, skip):
         x1 = self.upsample(input)
@@ -43,7 +39,7 @@ class DecoderBlock2(nn.Module):
         super().__init__()
 
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
-        self.conv_block = ConvBlock(input_dim + skip1_dim + skip2_dim, output_dim)
+        self.conv_block = ConvBlock1(input_dim + skip1_dim + skip2_dim, output_dim)
 
     def forward(self, input, skip1, skip2):
         x1 = self.upsample(input)
@@ -98,10 +94,10 @@ class Encoder2(nn.Module):
         assert len(filters) == 4
         self.max_pool = nn.MaxPool2d(kernel_size=2)
 
-        self.conv_block1 = ConvBlock(input_dim, filters[0])
-        self.conv_block2 = ConvBlock(filters[0], filters[1])
-        self.conv_block3 = ConvBlock(filters[1], filters[2])
-        self.conv_block4 = ConvBlock(filters[2], filters[3])
+        self.conv_block1 = ConvBlock1(input_dim, filters[0])
+        self.conv_block2 = ConvBlock1(filters[0], filters[1])
+        self.conv_block3 = ConvBlock1(filters[1], filters[2])
+        self.conv_block4 = ConvBlock1(filters[2], filters[3])
 
     def forward(self, input):
         x1 = self.conv_block1(input)
@@ -163,6 +159,7 @@ class DoubleUNet(nn.Module):
         self.output_layer1 = OutputBlock(decoder1_output_dim, output_dim)
 
         # Network2
+        self.max_pool = nn.MaxPool2d(kernel_size=2)
         self.e2 = Encoder2(input_dim, filters=encoder2_filters)
         self.ASPP2 = ASPP_v3(encoder2_filters[-1], ASPP2_output_dim)
         self.d2 = Decoder2(

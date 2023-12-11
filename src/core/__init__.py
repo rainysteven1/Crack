@@ -2,9 +2,10 @@ from .unet import *
 from .resunet import *
 
 MODEL_DICT = {
+    "attention_unet": AttentionUNet,
+    "double_unet": DoubleUNet,
     "unet": UNet,
     "unet_pp": UNet2Plus,
-    "double_unet": DoubleUNet,
     "resunet0": ResUNet0,
     "resunet1": ResUNet1,
     "resunet_pool": ResUNetPool,

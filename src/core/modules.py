@@ -320,18 +320,16 @@ class OutputBlock(InitModule):
         init_type: Union[str, None] = None,
     ) -> None:
         super().__init__(init_type)
-        self.layers = (
+
+        self.layer_list = [
             nn.Sequential(
                 Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
                 nn.Sigmoid(),
             )
-            if not is_bn
-            else nn.Sequential(
-                Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
-                nn.BatchNorm2d(output_dim),
-                nn.Sigmoid(),
-            )
-        )
+        ]
+        if is_bn:
+            self.layer_list.insert(1, nn.BatchNorm2d(output_dim))
+        self.layers = nn.Sequential(*self.layer_list)
 
         if self.init_type:
             self._initialize_weights()
