@@ -316,6 +316,7 @@ class OutputBlock(InitModule):
         self,
         input_dim: int,
         output_dim: int,
+        kernel_size: int = 1,
         is_bn: bool = False,
         init_type: Union[str, None] = None,
     ) -> None:
@@ -323,7 +324,7 @@ class OutputBlock(InitModule):
 
         self.layer_list = [
             nn.Sequential(
-                Conv2dSame(input_dim, output_dim, kernel_size=1, padding="same"),
+                Conv2dSame(input_dim, output_dim, kernel_size, padding="same"),
                 nn.Sigmoid(),
             )
         ]

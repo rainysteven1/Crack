@@ -50,7 +50,7 @@ class DecoderBlock(InitModule):
         self.init(self.up)
 
 
-class UNet2Plus(InitModule):
+class UNet2Plus(nn.Module):
     """
     UNet++
     """
@@ -63,7 +63,7 @@ class UNet2Plus(InitModule):
         is_ds: bool = True,
         init_type: str | None = "kaiming",
     ) -> None:
-        super().__init__(init_type)
+        super().__init__()
         assert len(filters) == 5
         self.is_ds = is_ds
 

@@ -7,6 +7,7 @@ MODEL_DICT = {
     "double_unet": DoubleUNet,
     "unet": UNet,
     "unet_pp": UNet2Plus,
+    "unet_ppp": UNet3Plus,
     "resunet0": ResUNet0,
     "resunet1": ResUNet1,
     "resunet_pool": ResUNetPool,
