@@ -33,46 +33,7 @@ class AttentionBlock(nn.Module):
         return output
 
 
-class ASPP(nn.Module):
-    """
-    version: DeepLabv2
-    """
-
-    def __init__(self, input_dim: int, output_dim: int, rate_scale: int = 1) -> None:
-        super().__init__()
-
-        def gen_conv_block(dilation: int):
-            return nn.Sequential(
-                Conv2dSame(
-                    input_dim,
-                    output_dim,
-                    kernel_size=3,
-                    padding="same",
-                    dilation=dilation,
-                ),
-                nn.BatchNorm2d(output_dim),
-            )
-
-        self.conv_block1 = gen_conv_block(6 * rate_scale)
-        self.conv_block2 = gen_conv_block(12 * rate_scale)
-        self.conv_block3 = gen_conv_block(18 * rate_scale)
-        self.conv_block4 = gen_conv_block(1)
-        self.output_layer = Conv2dSame(
-            output_dim, output_dim, kernel_size=1, padding="same"
-        )
-
-    def forward(self, input):
-        x1 = self.conv_block1(input)
-        x2 = self.conv_block2(input)
-        x3 = self.conv_block3(input)
-        x4 = self.conv_block4(input)
-
-        x5 = x1 + x2 + x3 + x4
-        output = self.output_layer(x5)
-        return output
-
-
-class ASPPPooling(nn.Module):
+class _ASPPPooling(nn.Module):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__()
         self.layers = nn.Sequential(
@@ -88,6 +49,42 @@ class ASPPPooling(nn.Module):
             size=input.shape[-2:],
             mode="bilinear",
         )
+
+
+class ASPP_v2(nn.Module):
+    """
+    Atrous spatial pyramid pooling (ASPP) \n
+    version: DeepLabv2
+    """
+
+    def __init__(
+        self, input_dim: int, output_dim: int, rates: list, rate_scale: int = 1
+    ) -> None:
+        super().__init__()
+
+        self.layers = nn.ModuleList()
+        for rate in rates:
+            self.layers.append(
+                nn.Sequential(
+                    Conv2dSame(
+                        input_dim,
+                        output_dim,
+                        kernel_size=3,
+                        padding="same",
+                        dilation=rate * rate_scale,
+                    ),
+                    nn.BatchNorm2d(output_dim),
+                )
+            )
+
+        self.output_layer = Conv2dSame(
+            output_dim, output_dim, kernel_size=1, padding="same"
+        )
+
+    def forward(self, input):
+        x1 = sum([layer(input) for layer in self.layers])
+        output = self.output_layer(x1)
+        return output
 
 
 class ASPP_v3(nn.Module):
@@ -118,7 +115,7 @@ class ASPP_v3(nn.Module):
         )
 
         # ASPP_POOL
-        self.module_list.append(ASPPPooling(input_dim, output_dim))
+        self.module_list.append(_ASPPPooling(input_dim, output_dim))
 
         # Output
         self.output_layer = nn.Sequential(
