@@ -51,7 +51,14 @@
 
         "criterion": {
           "type": "string",
-          "enum": ["BCELoss", "DiceLoss", "BCEDiceLoss"]
+          "enum": [
+            "BCELoss",
+            "DiceLoss",
+            "BCEDiceLoss",
+            "FocalLoss",
+            "IoULoss",
+            "HybridLoss1"
+          ]
         },
         "optimizer": {
           "anyOf": [
@@ -95,6 +102,22 @@
                 }
               },
               "required": ["name"]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "const": "AdamW"
+                },
+                "lr": {
+                  "type": "number"
+                },
+                "weight_decay": {
+                  "type": "number"
+                }
+              },
+              "required": ["name"]
             }
           ]
         },
@@ -104,6 +127,9 @@
               "type": "object",
               "properties": {
                 "name": { "type": "string", "const": "LambdaLR" },
+                "lrf": {
+                  "type": "number"
+                },
                 "lr_lambda": {
                   "type": "string",
                   "enum": ["lr_schedule1", "lr_schedule2"]

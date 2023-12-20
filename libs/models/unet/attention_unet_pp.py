@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
+
 from .common import SingleBlock, ConvBlock, Encoder, AttentionBlock
 from ..modules import OutputBlock, InitModule
 
 
-class DecoderBlock(InitModule):
+class _DecoderBlock(InitModule):
     def __init__(
         self,
         input_dim: int,
@@ -77,31 +78,37 @@ class AttentionUNet2Plus(InitModule):
         self.e = Encoder(input_dim, filters, init_type)
 
         # Decoder
-        self.d01 = DecoderBlock(filters[1], filters[0], init_type=init_type)
-        self.d11 = DecoderBlock(
+        self.d01 = _DecoderBlock(filters[1], filters[0], init_type=init_type)
+        self.d11 = _DecoderBlock(
             filters[2], filters[1], is_max_pool=True, N_concat=3, init_type=init_type
         )
-        self.d21 = DecoderBlock(
+        self.d21 = _DecoderBlock(
             filters[3], filters[2], is_max_pool=True, N_concat=3, init_type=init_type
         )
-        self.d31 = DecoderBlock(
+        self.d31 = _DecoderBlock(
             filters[4], filters[3], is_max_pool=True, N_concat=3, init_type=init_type
         )
 
-        self.d02 = DecoderBlock(filters[1], filters[0], N_concat=3, init_type=init_type)
-        self.d12 = DecoderBlock(
+        self.d02 = _DecoderBlock(
+            filters[1], filters[0], N_concat=3, init_type=init_type
+        )
+        self.d12 = _DecoderBlock(
             filters[2], filters[1], is_max_pool=True, N_concat=4, init_type=init_type
         )
-        self.d22 = DecoderBlock(
+        self.d22 = _DecoderBlock(
             filters[3], filters[2], is_max_pool=True, N_concat=4, init_type=init_type
         )
 
-        self.d03 = DecoderBlock(filters[1], filters[0], N_concat=4, init_type=init_type)
-        self.d13 = DecoderBlock(
+        self.d03 = _DecoderBlock(
+            filters[1], filters[0], N_concat=4, init_type=init_type
+        )
+        self.d13 = _DecoderBlock(
             filters[2], filters[1], is_max_pool=True, N_concat=5, init_type=init_type
         )
 
-        self.d04 = DecoderBlock(filters[1], filters[0], N_concat=5, init_type=init_type)
+        self.d04 = _DecoderBlock(
+            filters[1], filters[0], N_concat=5, init_type=init_type
+        )
 
         # Output
         def final_block():

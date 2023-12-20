@@ -60,8 +60,8 @@ def predict(
         for x, y in loader:
             x = x.to(DEVICE, dtype=torch.float32)
             y = y.to(DEVICE, dtype=torch.float32)
-            y_pred = model(x)
-            y_pred = y_pred if not isinstance(y_pred, list) else y_pred[-1]
+            outputs = model(x)
+            y_pred = y_pred if not isinstance(outputs, list) else outputs[-1]
             x_all = torch.cat((x_all, x), dim=0)
             y_true_all = torch.cat((y_true_all, y), dim=0)
             y_pred_all = torch.cat((y_pred_all, y_pred), dim=0)
@@ -119,8 +119,8 @@ def calculate_test_metrics_cpu(y_true: np.ndarray, y_pred: np.ndarray):
 
 
 def calculate_test_metrics_gpu(y_true: torch.Tensor, y_pred: torch.Tensor):
-    yy_true = torch.flatten(y_true)
-    yy_pred = torch.flatten(y_pred)
+    yy_true = y_true.view(-1)
+    yy_pred = y_pred.view(-1)
 
     accuracy = torchmetrics.functional.accuracy(yy_pred, yy_true, task="binary")
 

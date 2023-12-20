@@ -12,18 +12,16 @@
     "batch_size": 4,
     "N_epochs": 100,
     "train_split": 1500,
-    "criterion": "BCEDiceLoss",
+    "criterion": "HybridLoss1",
     "optimizer": {
-      "name": "SGD",
+      "name": "AdamW",
       "lr": 1e-3,
-      "momentum": 0.9,
-      "weight_decay": 1e-4,
-      "nesterov": false
+      "weight_decay": 1e-4
     },
     "scheduler": {
-      "name": "CosineAnnealingLR",
-      "T_max": 100,
-      "eta_min": 1e-5
+      "name": "LambdaLR",
+      "lrf": 5e-4,
+      "lr_lambda": "lr_schedule2"
     },
     "early_stopping_patience": -1
   },

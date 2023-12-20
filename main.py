@@ -2,10 +2,10 @@ import sys, os, argparse, pathlib, platform, shutil, time
 import ujson
 from jsonschema import validate
 
-sys.path.insert(0, "./src")
+sys.path.append(os.path.dirname(__file__) + os.sep + "../")
 
+from libs import MODEL_DICT
 from src import DEVICE, GPU_NAME
-from src.core import MODEL_DICT
 from src.logger import LoggerFactory, init_file_handler
 from src.plot import *
 from src.train import train

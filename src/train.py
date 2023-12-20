@@ -5,55 +5,33 @@ import torch
 
 from logging import Logger
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LambdaLR, CosineAnnealingLR, ReduceLROnPlateau
-from torchmetrics.classification import BinaryAccuracy
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torchmetrics.classification import BinaryAccuracy, BinaryJaccardIndex
 
 from src import DEVICE
-from .core.losses import *
-from .core.metrics import IOU
 from .dataset import CrackDataset
 from .utils import *
-
-OPTIMIZER_DICT = {
-    "Adam": torch.optim.Adam,
-    "NAdam": torch.optim.NAdam,
-    "RMSprop": torch.optim.RMSprop,
-    "SGD": torch.optim.SGD,
-}
-SCHEDULER_DICT = {
-    "LambdaLR": LambdaLR,
-    "CosineAnnealingLR": CosineAnnealingLR,
-    "ReduceLROnPlateau": ReduceLROnPlateau,
-}
-CRITERION_DICT = {
-    "BCELoss": nn.BCELoss,
-    "DiceLoss": DiceLoss,
-    "BCEDiceLoss": BCEDiceLoss,
-}
-
-input_dim = 3
 
 
 class MetricRecord:
     def __init__(self) -> None:
         self.loss = MetricTracker()
-        self.IOU = MetricTracker()
         self.acc = MetricTracker()
-
+        self.IoU = MetricTracker()
         self.reset()
 
     def reset(self):
         self.loss.reset()
-        self.IOU.reset()
         self.acc.reset()
+        self.IoU.reset()
 
-    def update(self, loss, IOU, acc, n=1):
+    def update(self, loss, IoU, acc, n=1):
         self.loss.update(loss, n)
-        self.IOU.update(IOU, n)
         self.acc.update(acc, n)
+        self.IoU.update(IoU, n)
 
     def get_metrics(self):
-        return [self.loss.get_avg(), self.acc.get_avg(), self.IOU.get_avg()]
+        return [self.loss.get_avg(), self.acc.get_avg(), self.IoU.get_avg()]
 
 
 def train(
@@ -100,37 +78,16 @@ def train(
     validation_metric_record = MetricRecord()
 
     model = build_model(category)
-    # optimizer
-    optimizer_name = train_settings["optimizer"]["name"]
-    del train_settings["optimizer"]["name"]
-    optimizer = OPTIMIZER_DICT.get(optimizer_name)(
-        model.parameters(), **train_settings["optimizer"]
-    )
-    # loss and metric
-    criterion = CRITERION_DICT.get(train_settings["criterion"])()
-    metric = BinaryAccuracy().to(DEVICE)
-    log_model_summary(
-        logger, model, batch_size, input_dim=input_dim, device=DEVICE, **data_attributes
-    )
+    log_model_summary(logger, model, batch_size, device=DEVICE, **data_attributes)
+    optimizer = get_optimizer(train_settings["optimizer"], model)
+    criterion = get_criterion(train_settings["criterion"])
+    IoU = BinaryJaccardIndex().to(DEVICE)
+    acc = BinaryAccuracy().to(DEVICE)
 
     best_loss = float("inf")
     early_stopping_count = 0
     msg_list = list()
-    # scheduler
-    scheduler = None
-    lr_lambda_dict = {
-        "lr_schedule1": lr_schedule1,
-        "lr_schedule2": lr_schedule2(epochs),
-    }
-    if "name" in train_settings["scheduler"]:
-        scheduler_class = SCHEDULER_DICT.get(train_settings["scheduler"]["name"])
-        del train_settings["scheduler"]["name"]
-        if scheduler_class == LambdaLR:
-            lr_lambda = lr_lambda_dict.get(train_settings["scheduler"]["lr_lambda"])
-            scheduler = LambdaLR(optimizer, lr_lambda)
-        else:
-            scheduler = scheduler_class(optimizer, **train_settings["scheduler"])
-    # early stopping
+    scheduler = get_scheduler(train_settings["scheduler"], optimizer, epochs)
     early_stopping_patience = train_settings["early_stopping_patience"]
 
     for epoch in range(1, epochs + 1):
@@ -140,22 +97,22 @@ def train(
         train_metric_record.reset()
         for x, y in train_loader:
             x = x.to(DEVICE, dtype=torch.float32)
-            y = y.view(-1).to(DEVICE, dtype=torch.float32)
+            y = y.to(DEVICE, dtype=torch.float32)
             optimizer.zero_grad()
             outputs = model(x)
             if not isinstance(outputs, list):
-                y_pred = outputs.view(-1)
+                y_pred = outputs
                 loss = criterion(y_pred, y)
             else:
                 loss = 0
                 for output in outputs:
-                    loss += criterion(output.view(-1), y)
+                    loss += criterion(output, y)
                 loss /= len(outputs)
-                y_pred = outputs[-1].view(-1)
+                y_pred = outputs[-1]
             loss.backward()
             optimizer.step()
             train_metric_record.update(
-                loss.item(), IOU(y_pred, y).item(), metric(y_pred, y).item()
+                loss.item(), IoU(y_pred, y).item(), acc(y_pred, y).item()
             )
 
         model.eval()
@@ -163,27 +120,27 @@ def train(
         with torch.no_grad():
             for x, y in validation_loader:
                 x = x.to(DEVICE, dtype=torch.float32)
-                y = y.view(-1).to(DEVICE, dtype=torch.float32)
+                y = y.to(DEVICE, dtype=torch.float32)
                 y_pred = model(x)
                 if not isinstance(y_pred, list):
-                    y_pred = y_pred.view(-1)
+                    y_pred = y_pred
                     loss = criterion(y_pred, y)
                 else:
                     loss = 0
                     for output in y_pred:
-                        loss += criterion(output.view(-1), y)
+                        loss += criterion(output, y)
                     loss /= len(outputs)
-                    y_pred = y_pred[-1].view(-1)
+                    y_pred = y_pred[-1]
                 validation_metric_record.update(
                     loss.item(),
-                    IOU(y_pred, y).item(),
-                    metric(y_pred, y).item(),
+                    IoU(y_pred, y).item(),
+                    acc(y_pred, y).item(),
                 )
 
         duration = time.time() - start_time
         lr = optimizer.param_groups[0]["lr"]
         logger_msg = (
-            "Epoch: %5d/%d - %ds - lr: %.4e - loss: %.4f - acc: %.4f - IOU: %.4f - val_loss: %.4f - val_acc: %.4f - val_IOU: %.4f"
+            "Epoch: %5d/%d - %ds - lr: %.4e - loss: %.4f - acc: %.4f - IoU: %.4f - val_loss: %.4f - val_acc: %.4f - val_IoU: %.4f"
             % (
                 epoch,
                 epochs,

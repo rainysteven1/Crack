@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from .common import ConvBlock, Encoder, EncoderBlock
 from ..modules import OutputBlock
 
 
-class DecoderBlock(nn.Module):
+class _DecoderBlock(nn.Module):
     def __init__(
         self, input_dim: int, output_dim: int, is_upsample: bool = True
     ) -> None:
@@ -52,10 +53,10 @@ class UNet(nn.Module):
         self.b1 = EncoderBlock(filters[3], filters[4] // factor)
 
         # Decoder
-        self.d1 = DecoderBlock(filters[4], filters[3] // factor, is_upsample)
-        self.d2 = DecoderBlock(filters[3], filters[2] // factor, is_upsample)
-        self.d3 = DecoderBlock(filters[2], filters[1] // factor, is_upsample)
-        self.d4 = DecoderBlock(filters[1], filters[0], is_upsample)
+        self.d1 = _DecoderBlock(filters[4], filters[3] // factor, is_upsample)
+        self.d2 = _DecoderBlock(filters[3], filters[2] // factor, is_upsample)
+        self.d3 = _DecoderBlock(filters[2], filters[1] // factor, is_upsample)
+        self.d4 = _DecoderBlock(filters[1], filters[0], is_upsample)
 
         # Output
         self.output_layer = OutputBlock(filters[0], output_dim)

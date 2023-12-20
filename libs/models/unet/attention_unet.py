@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
+
 from .common import SingleBlock, ConvBlock, Encoder, AttentionBlock
 from ..modules import OutputBlock, InitModule
 
 
-class DecoderBlock(InitModule):
+class _DecoderBlock(InitModule):
     def __init__(
         self,
         input_dim: int,
@@ -61,16 +62,16 @@ class AttentionUNet(nn.Module):
         self.e = Encoder(input_dim, filters, init_type)
 
         # Decoder
-        self.d1 = DecoderBlock(
+        self.d1 = _DecoderBlock(
             filters[4], filters[3], is_upsample=is_upsample, init_type=init_type
         )
-        self.d2 = DecoderBlock(
+        self.d2 = _DecoderBlock(
             filters[3], filters[2], is_upsample=is_upsample, init_type=init_type
         )
-        self.d3 = DecoderBlock(
+        self.d3 = _DecoderBlock(
             filters[2], filters[1], is_upsample=is_upsample, init_type=init_type
         )
-        self.d4 = DecoderBlock(
+        self.d4 = _DecoderBlock(
             filters[1], filters[0], is_upsample=is_upsample, init_type=init_type
         )
 

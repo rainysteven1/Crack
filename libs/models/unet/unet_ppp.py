@@ -5,7 +5,7 @@ from .common import SingleBlock, Encoder
 from ..modules import Conv2dSame, OutputBlock, InitModule
 
 
-class DecoderBlock(nn.Module):
+class _DecoderBlock(nn.Module):
     def __init__(
         self,
         cat_dim: int,
@@ -51,11 +51,11 @@ class DecoderBlock(nn.Module):
         return output
 
 
-class BasicModule(InitModule):
+class _BasicModule(InitModule):
     def __init__(
         self,
         input_dim: int,
-        filters: list = [32, 64, 128, 256, 512],
+        filters: list,
         init_type: str | None = "kaiming",
     ) -> None:
         super().__init__(init_type)
@@ -79,7 +79,7 @@ class BasicModule(InitModule):
         self.d = nn.ModuleList()
         for i in range(self.d_length):
             self.d.append(
-                DecoderBlock(
+                _DecoderBlock(
                     self.cat_dim,
                     self.up_dim,
                     self.filters,
@@ -98,7 +98,7 @@ class BasicModule(InitModule):
             self.x_list[self.d_length - 1 - i] = self.d[i](*self.x_list)
 
 
-class UNet3Plus(BasicModule):
+class UNet3Plus(_BasicModule):
     """
     UNet3+
     """
@@ -125,7 +125,7 @@ class UNet3Plus(BasicModule):
         return output
 
 
-class UNet3PlusDeepSup(BasicModule):
+class UNet3PlusDeepSup(_BasicModule):
     """
     UNet3+ with deep supervision
     """
@@ -134,7 +134,7 @@ class UNet3PlusDeepSup(BasicModule):
         self,
         input_dim: int,
         output_dim: int,
-        filters: list = [64, 128, 256, 512, 1024],
+        filters: list = [32, 64, 128, 256, 512],
         init_type: str | None = "kaiming",
     ) -> None:
         super().__init__(input_dim, filters, init_type)
@@ -170,7 +170,7 @@ class UNet3PlusDeepSup(BasicModule):
         self.output_layers[1:].apply(lambda s: s.apply(lambda m: self.init(m)))
 
 
-class UNet3PlusDeepSupCGM(BasicModule):
+class UNet3PlusDeepSupCGM(_BasicModule):
     """
     UNet3+ with deep supervision and class-guided module
     """
@@ -179,7 +179,7 @@ class UNet3PlusDeepSupCGM(BasicModule):
         self,
         input_dim: int,
         output_dim: int,
-        filters: list = [64, 128, 256, 512, 1024],
+        filters: list = [32, 64, 128, 256, 512],
         init_type: str | None = "kaiming",
     ) -> None:
         super().__init__(input_dim, filters, init_type)
@@ -215,12 +215,17 @@ class UNet3PlusDeepSupCGM(BasicModule):
         return final
 
     def forward(self, input):
-        super().forward(input)
+        # Encoder
+        self.x_list = self.e(input)
 
         # Classification
         cls_branch = self.cls(self.x_list[-1]).squeeze(3).squeeze(2)  # (B,N,1,1)->(B,N)
         cls_branch_max = cls_branch.argmax(dim=1)
         cls_branch_max = cls_branch_max[:, np.newaxis].float()
+
+        # Decoder
+        for i in range(self.d_length):
+            self.x_list[self.d_length - 1 - i] = self.d[i](*self.x_list)
 
         outputs = [
             torch.sigmoid(self.dot_product(module(x), cls_branch_max))

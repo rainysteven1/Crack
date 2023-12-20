@@ -1,11 +1,15 @@
 import io, math, sys
 import torch
+import torch.nn as nn
 
 from logging import Logger
+from torch.optim.lr_scheduler import LambdaLR
 from torchsummary import summary
 
 from src import DEVICE
-from .core import MODEL_DICT
+from src import MODEL_DICT, LOSS_DICT, OPTIMIZER_DICT, SCHEDULER_DICT
+
+INPUT_DIM = 3
 
 
 # https://github.com/pytorch/examples/blob/master/imagenet/main.py
@@ -35,7 +39,6 @@ def log_model_summary(
     logger: Logger,
     model: torch.nn.Module,
     batch_size: int,
-    input_dim: int,
     batch_height: int,
     batch_width: int,
     device: str,
@@ -44,7 +47,7 @@ def log_model_summary(
     sys.stdout = output
     summary(
         model,
-        (input_dim, batch_height, batch_width),
+        (INPUT_DIM, batch_height, batch_width),
         batch_size,
         device,
     )
@@ -54,7 +57,20 @@ def log_model_summary(
 
 
 def build_model(category: str):
-    return MODEL_DICT.get(category)(input_dim=3, output_dim=1).to(DEVICE)
+    return MODEL_DICT.get(category)(INPUT_DIM, output_dim=1).to(DEVICE)
+
+
+def get_criterion(category: str):
+    return LOSS_DICT.get(category)()
+
+
+def get_optimizer(optimizer_settings: dict, model: nn.Module):
+    optimizer_name = optimizer_settings["name"]
+    del optimizer_settings["name"]
+    optimizer = OPTIMIZER_DICT.get(optimizer_name)(
+        model.parameters(), **optimizer_settings
+    )
+    return optimizer
 
 
 def lr_schedule1(epoch):
@@ -71,8 +87,25 @@ def lr_schedule1(epoch):
 
 
 # https://arxiv.org/pdf/1812.01187.pdf
-def lr_schedule2(epochs):
+def lr_schedule2(epochs, y1=0.05, y2=1):
     return (
-        lambda epoch: (((1 + math.cos(epoch * math.pi / epochs)) / 2) ** 1.0) * 0.95
-        + 0.05
+        lambda x: (((1 - math.cos(x * math.pi / epochs)) / 2) ** 1.0) * (y2 - y1) + y1
     )
+
+
+def get_scheduler(scheduler_settings: dict, optimizer, epochs: int = 100):
+    if "name" in scheduler_settings:
+        scheduler_class = SCHEDULER_DICT.get(scheduler_settings["name"])
+        del scheduler_settings["name"]
+        if scheduler_class == LambdaLR:
+            lr_lambda_dict = {
+                "lr_schedule1": lr_schedule1,
+                "lr_schedule2": lr_schedule2(epochs)
+                if "lrf" not in scheduler_settings
+                else lr_schedule2(epochs, 1, scheduler_settings["lrf"]),
+            }
+            lr_lambda = lr_lambda_dict.get(scheduler_settings["lr_lambda"])
+            scheduler = LambdaLR(optimizer, lr_lambda)
+        else:
+            scheduler = scheduler_class(optimizer, **scheduler_settings)
+    return scheduler

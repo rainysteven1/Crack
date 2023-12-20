@@ -3,5 +3,5 @@
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "ms-python.black-formatter"
   },
-  "python.analysis.extraPaths": ["./src"]
+  "python.analysis.extraPaths": ["./src", "./libs"]
 }

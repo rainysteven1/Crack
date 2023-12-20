@@ -1,10 +1,14 @@
+
+
 import math
 import torch
 import torch.nn as nn
-import torch.nn.init as init
 import torch.nn.functional as F
-from typing import Union
+
+from typing import Optional
 from torch.nn.common_types import _size_2_t
+
+from ..utils.init import InitModule
 
 
 class Conv2dSame(nn.Conv2d):
@@ -16,6 +20,7 @@ class Conv2dSame(nn.Conv2d):
         stride: _size_2_t = 1,
         padding: _size_2_t | str = 0,
         dilation: _size_2_t = 1,
+        bias=True,
     ) -> None:
         super().__init__(
             in_channels,
@@ -24,6 +29,7 @@ class Conv2dSame(nn.Conv2d):
             stride,
             0 if type(padding) == str else padding,
             dilation,
+            bias=bias,
         )
         self._padding = padding
 
@@ -262,55 +268,6 @@ class ASPP_v3(nn.Module):
         return output
 
 
-def init_batchNorm(module):
-    init.normal_(module.weight.data, 1.0, 0.02)
-    init.constant_(module.bias.data, 0.0)
-
-
-class InitWeights_He:
-    def __init__(self, neg_slope=0):
-        self.neg_slope = neg_slope
-
-    def __call__(self, module):
-        if isinstance(module, nn.BatchNorm2d):
-            init_batchNorm(module)
-        if isinstance(module, Conv2dSame) or isinstance(module, nn.ConvTranspose2d):
-            module.weight = init.kaiming_normal_(
-                module.weight, a=self.neg_slope, mode="fan_in"
-            )
-            if module.bias is not None:
-                module.bias = init.constant_(module.bias, 0)
-
-
-class InitWeights_XavierUniform:
-    def __init__(self, gain=1):
-        self.gain = gain
-
-    def __call__(self, module):
-        if isinstance(module, nn.BatchNorm2d):
-            init_batchNorm(module)
-        if isinstance(module, Conv2dSame) or isinstance(module, nn.ConvTranspose2d):
-            module.weight = init.xavier_uniform_(module.weight, self.gain)
-            if module.bias is not None:
-                module.bias = init.constant_(module.bias, 0)
-
-
-class InitModule(nn.Module):
-    def __init__(self, init_type: Union[str, None] = None):
-        super().__init__()
-
-        self.init_type = init_type
-
-        if self.init_type:
-            if self.init_type == "kaiming":
-                self.init = InitWeights_He()
-            elif self.init_type == "xavier":
-                self.init = InitWeights_XavierUniform()
-
-    def _initialize_weights(self):
-        pass
-
-
 class OutputBlock(InitModule):
     def __init__(
         self,
@@ -318,7 +275,7 @@ class OutputBlock(InitModule):
         output_dim: int,
         kernel_size: int = 1,
         is_bn: bool = False,
-        init_type: Union[str, None] = None,
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__(init_type)
 

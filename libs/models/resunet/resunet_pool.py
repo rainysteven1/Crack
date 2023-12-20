@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
+
 from ..modules import Conv2dSame, BasicBlock, OutputBlock
 
 
-class InputBlock(nn.Module):
+class _InputBlock(nn.Module):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__()
         self.conv_block = nn.Sequential(
@@ -20,7 +21,7 @@ class InputBlock(nn.Module):
         return torch.add(self.conv_block(input), self.skip_block(input))
 
 
-class RedisualBlock(InputBlock):
+class _RedisualBlock(_InputBlock):
     def __init__(
         self,
         input_dim: int,
@@ -37,7 +38,7 @@ class RedisualBlock(InputBlock):
         return output
 
 
-class DecoderBlock(nn.Module):
+class _DecoderBlock(nn.Module):
     def __init__(
         self, input_dim: int, output_dim: int, skip_dim: int, is_upsample=True
     ) -> None:
@@ -47,7 +48,7 @@ class DecoderBlock(nn.Module):
             if is_upsample
             else nn.ConvTranspose2d(input_dim, input_dim, kernel_size=2, stride=2)
         )
-        self.redisual = RedisualBlock(input_dim + skip_dim, output_dim, is_pool=False)
+        self.redisual = _RedisualBlock(input_dim + skip_dim, output_dim, is_pool=False)
 
     def forward(self, input, skip):
         x0 = self.upsample(input)
@@ -65,20 +66,20 @@ class ResUNetPool(nn.Module):
         is_upsample = False
 
         # Encoder
-        self.input_layer = InputBlock(input_dim, filters[0])  # c1
-        self.e1 = RedisualBlock(filters[0], filters[1])  # c2
-        self.e2 = RedisualBlock(filters[1], filters[2])  # c3
-        self.e3 = RedisualBlock(filters[2], filters[3])  # c4
+        self.input_layer = _InputBlock(input_dim, filters[0])  # c1
+        self.e1 = _RedisualBlock(filters[0], filters[1])  # c2
+        self.e2 = _RedisualBlock(filters[1], filters[2])  # c3
+        self.e3 = _RedisualBlock(filters[2], filters[3])  # c4
 
-        # Bridge
-        self.b1 = RedisualBlock(filters[3], filters[4])
-        self.b2 = RedisualBlock(filters[4], filters[4], is_pool=False)
+        # Bridge_
+        self.b1 = _RedisualBlock(filters[3], filters[4])
+        self.b2 = _RedisualBlock(filters[4], filters[4], is_pool=False)
 
-        # Decoder
-        self.d1 = DecoderBlock(filters[4], filters[3], filters[3], is_upsample=False)
-        self.d2 = DecoderBlock(filters[3], filters[2], filters[2], is_upsample=False)
-        self.d3 = DecoderBlock(filters[2], filters[1], filters[1], is_upsample=False)
-        self.d4 = DecoderBlock(filters[1], filters[0], filters[0], is_upsample=False)
+        # Decoder_
+        self.d1 = _DecoderBlock(filters[4], filters[3], filters[3], is_upsample=False)
+        self.d2 = _DecoderBlock(filters[3], filters[2], filters[2], is_upsample=False)
+        self.d3 = _DecoderBlock(filters[2], filters[1], filters[1], is_upsample=False)
+        self.d4 = _DecoderBlock(filters[1], filters[0], filters[0], is_upsample=False)
 
         # Output
         self.ouput_layer = OutputBlock(filters[0], output_dim, is_bn=True)

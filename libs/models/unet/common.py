@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
-from typing import Union
+
+from typing import Optional
+
 from ..modules import Conv2dSame, InitModule
 
 
@@ -13,7 +15,7 @@ class SingleBlock(InitModule):
         stride: int = 1,
         padding: str | int = 1,
         is_batchNorm=True,
-        init_type: Union[str, None] = None,
+        init_type: Optional[str] = None,
     ):
         super().__init__(init_type)
         layer_list = [

@@ -1,10 +1,12 @@
+
+
 import torch
 import torch.nn as nn
-from torchsummary import summary
+
 from ..modules import Conv2dSame, BasicBlock, RedisualBlock, OutputBlock
 
 
-class InputBlock(nn.Module):
+class _InputBlock(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -38,7 +40,7 @@ class InputBlock(nn.Module):
         return torch.add(self.conv_block(input), self.skip_block(input))
 
 
-class EncoderBlock(RedisualBlock):
+class _EncoderBlock(RedisualBlock):
     def __init__(
         self,
         input_dim: int,
@@ -58,7 +60,7 @@ class EncoderBlock(RedisualBlock):
         return self.conv_block(input) if self.is_bridge else super().forward(input)
 
 
-class DecoderBlock(nn.Module):
+class _DecoderBlock(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -109,23 +111,23 @@ class ResUNet0(nn.Module):
         super().__init__()
 
         # Encoder
-        self.input_layer = InputBlock(
+        self.input_layer = _InputBlock(
             input_dim, filters[0], skip_kernal_size=3, padding=1
         )
-        self.e1 = EncoderBlock(
+        self.e1 = _EncoderBlock(
             filters[0], filters[1], skip_kernel_size=3, stride=2, padding=1
         )
-        self.e2 = EncoderBlock(
+        self.e2 = _EncoderBlock(
             filters[1], filters[2], skip_kernel_size=3, stride=2, padding=1
         )
 
         # Bridge
-        self.b1 = EncoderBlock(
+        self.b1 = _EncoderBlock(
             filters[2], filters[3], skip_kernel_size=3, stride=2, padding=1
         )
 
         # Decoder
-        self.d1 = DecoderBlock(
+        self.d1 = _DecoderBlock(
             filters[3],
             filters[2],
             filters[2],
@@ -135,7 +137,7 @@ class ResUNet0(nn.Module):
             r_stride=1,
             is_upsample=False,
         )
-        self.d2 = DecoderBlock(
+        self.d2 = _DecoderBlock(
             filters[2],
             filters[1],
             filters[1],
@@ -145,7 +147,7 @@ class ResUNet0(nn.Module):
             r_stride=1,
             is_upsample=False,
         )
-        self.d3 = DecoderBlock(
+        self.d3 = _DecoderBlock(
             filters[1],
             filters[0],
             filters[0],
@@ -185,20 +187,20 @@ class ResUNet1(nn.Module):
         super().__init__()
 
         # Encoder
-        self.input_layer = InputBlock(input_dim, filters[0])
-        self.e1 = EncoderBlock(filters[0], filters[1], stride=2)
-        self.e2 = EncoderBlock(filters[1], filters[2], stride=2)
-        self.e3 = EncoderBlock(filters[2], filters[3], stride=2)
-        self.e4 = EncoderBlock(filters[3], filters[4], stride=2)
+        self.input_layer = _InputBlock(input_dim, filters[0])
+        self.e1 = _EncoderBlock(filters[0], filters[1], stride=2)
+        self.e2 = _EncoderBlock(filters[1], filters[2], stride=2)
+        self.e3 = _EncoderBlock(filters[2], filters[3], stride=2)
+        self.e4 = _EncoderBlock(filters[3], filters[4], stride=2)
 
         # Bridge
-        self.b1 = EncoderBlock(filters[4], filters[4], is_bridge=True)
+        self.b1 = _EncoderBlock(filters[4], filters[4], is_bridge=True)
 
         # Decoder
-        self.d1 = DecoderBlock(filters[4], filters[4], skip_dim=filters[3])
-        self.d2 = DecoderBlock(filters[4], filters[3], skip_dim=filters[2])
-        self.d3 = DecoderBlock(filters[3], filters[2], skip_dim=filters[1])
-        self.d4 = DecoderBlock(filters[2], filters[1], skip_dim=filters[0])
+        self.d1 = _DecoderBlock(filters[4], filters[4], skip_dim=filters[3])
+        self.d2 = _DecoderBlock(filters[4], filters[3], skip_dim=filters[2])
+        self.d3 = _DecoderBlock(filters[3], filters[2], skip_dim=filters[1])
+        self.d4 = _DecoderBlock(filters[2], filters[1], skip_dim=filters[0])
 
         # Output
         self.output_layer = OutputBlock(filters[1], output_dim)
@@ -224,8 +226,3 @@ class ResUNet1(nn.Module):
         output = self.output_layer(x10)
 
         return output
-
-
-if __name__ == "__main__":
-    resunet = ResUNet0(3, 1)
-    summary(resunet, (3, 256, 256), 4, "cpu")

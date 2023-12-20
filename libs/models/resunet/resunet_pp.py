@@ -1,18 +1,18 @@
 import torch
 import torch.nn as nn
+
 from ..modules import (
     Conv2dSame,
     BasicBlock,
     RedisualBlock,
     SqueezeExciteBlock,
-    ASPP,
     ASPP_v3,
     AttentionBlock,
     OutputBlock,
 )
 
 
-class InputBlock(nn.Module):
+class _InputBlock(nn.Module):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__()
 
@@ -29,7 +29,7 @@ class InputBlock(nn.Module):
         return torch.add(self.conv_block(input), self.skip_block(input))
 
 
-class EncoderBlock(nn.Module):
+class _EncoderBlock(nn.Module):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__()
 
@@ -42,7 +42,7 @@ class EncoderBlock(nn.Module):
         return self.layers(input)
 
 
-class DecoderBlock(nn.Module):
+class _DecoderBlock(nn.Module):
     def __init__(self, input_dim: int, output_dim: int, skip_dim: int) -> None:
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
@@ -65,18 +65,18 @@ class ResUNet2Plus(nn.Module):
         assert len(filters) == 5
 
         # Encoder
-        self.input_layer = InputBlock(input_dim, filters[0])
-        self.e1 = EncoderBlock(filters[0], filters[1])
-        self.e2 = EncoderBlock(filters[1], filters[2])
-        self.e3 = EncoderBlock(filters[2], filters[3])
+        self.input_layer = _InputBlock(input_dim, filters[0])
+        self.e1 = _EncoderBlock(filters[0], filters[1])
+        self.e2 = _EncoderBlock(filters[1], filters[2])
+        self.e3 = _EncoderBlock(filters[2], filters[3])
 
         # Bridge
         self.b1 = ASPP_v3(filters[3], filters[4])
 
         # Decoder
-        self.d1 = DecoderBlock(filters[4], filters[3], skip_dim=filters[2])
-        self.d2 = DecoderBlock(filters[3], filters[2], skip_dim=filters[1])
-        self.d3 = DecoderBlock(filters[2], filters[1], skip_dim=filters[0])
+        self.d1 = _DecoderBlock(filters[4], filters[3], skip_dim=filters[2])
+        self.d2 = _DecoderBlock(filters[3], filters[2], skip_dim=filters[1])
+        self.d3 = _DecoderBlock(filters[2], filters[1], skip_dim=filters[0])
 
         # Output
         self.output_layer = nn.Sequential(
