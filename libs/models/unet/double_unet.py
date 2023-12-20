@@ -1,12 +1,11 @@
-
-
 import torch
 import torch.nn as nn
 
 from torchvision.models import vgg19, VGG19_Weights
 
 from .common import ConvBlock
-from ..modules import ASPP_v3, SqueezeExciteBlock, OutputBlock
+from ..modules.base import SqueezeExciteBlock, OutputBlock
+from ..modules.pyramid import ASPP_v3
 
 
 class _ConvBlock1(nn.Module):
@@ -154,26 +153,26 @@ class DoubleUNet(nn.Module):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__()
         encoder1_filters: list = [64, 128, 256, 512, 512]
-        ASPP1_output_dim = 64
+        aspp1_output_dim = 64
         decoder1_output_dim = 32
         encoder2_filters = [32, 64, 128, 256]
-        ASPP2_output_dim = 64
+        aspp2_output_dim = 64
         decoder2_output_dim = 32
 
         # Network1
         self.e1 = _Encoder1()
-        self.ASPP1 = ASPP_v3(encoder1_filters[-1], ASPP1_output_dim)
+        self.aspp1 = ASPP_v3(encoder1_filters[-1], aspp1_output_dim)
         self.d1 = _Decoder1(
-            ASPP1_output_dim, decoder1_output_dim, filters=encoder1_filters[:-1]
+            aspp1_output_dim, decoder1_output_dim, filters=encoder1_filters[:-1]
         )
         self.output_layer1 = OutputBlock(decoder1_output_dim, output_dim)
 
         # Network2
         self.max_pool = nn.MaxPool2d(kernel_size=2)
         self.e2 = _Encoder2(input_dim, filters=encoder2_filters)
-        self.ASPP2 = ASPP_v3(encoder2_filters[-1], ASPP2_output_dim)
+        self.aspp2 = ASPP_v3(encoder2_filters[-1], aspp2_output_dim)
         self.d2 = _Decoder2(
-            ASPP2_output_dim,
+            aspp2_output_dim,
             decoder2_output_dim,
             filters=encoder2_filters,
             encoder1_filters=encoder1_filters[:-1],
@@ -185,7 +184,7 @@ class DoubleUNet(nn.Module):
     def forward(self, input):
         # Network1
         skip_list1 = self.e1(input)
-        x1 = self.ASPP1(skip_list1[0])
+        x1 = self.aspp1(skip_list1[0])
         x2 = self.d1(x1, skip_list1[1:])
         output1 = self.output_layer1(x2)
 
@@ -193,7 +192,7 @@ class DoubleUNet(nn.Module):
 
         # Network2
         skip_list2 = self.e2(x3)
-        x4 = self.ASPP2(skip_list2[0])
+        x4 = self.aspp2(skip_list2[0])
         x5 = self.d2(x4, skip_list1[1:], skip_list2[1:])
         output2 = self.output_layer2(x5)
 

@@ -1,10 +1,8 @@
-
-
 import torch
 import torch.nn as nn
 
 from .common import ConvBlock, Encoder
-from ..modules import OutputBlock, InitModule
+from ..modules.base import OutputBlock, InitModule
 
 
 class _DecoderBlock(InitModule):

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from .common import SingleBlock, Encoder
-from ..modules import Conv2dSame, OutputBlock, InitModule
+from ..modules.base import Conv2dSame, OutputBlock, InitModule
 
 
 class _DecoderBlock(nn.Module):

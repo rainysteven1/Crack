@@ -1,15 +1,14 @@
 import torch
 import torch.nn as nn
 
-from ..modules import (
+from ..modules.base import (
     Conv2dSame,
     BasicBlock,
     RedisualBlock,
     SqueezeExciteBlock,
-    ASPP_v3,
-    AttentionBlock,
     OutputBlock,
 )
+from ..modules.pyramid import AttentionBlock, ASPP_v3
 
 
 class _InputBlock(nn.Module):

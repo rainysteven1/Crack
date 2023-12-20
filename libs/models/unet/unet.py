@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .common import ConvBlock, Encoder, EncoderBlock
-from ..modules import OutputBlock
+from ..modules.base import OutputBlock
 
 
 class _DecoderBlock(nn.Module):

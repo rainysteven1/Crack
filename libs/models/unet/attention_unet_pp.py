@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from .common import SingleBlock, ConvBlock, Encoder, AttentionBlock
-from ..modules import OutputBlock, InitModule
+from ..modules.base import OutputBlock, InitModule
 
 
 class _DecoderBlock(InitModule):

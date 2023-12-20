@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from ..modules import Conv2dSame, BasicBlock, RedisualBlock, OutputBlock
+from ..modules.base import Conv2dSame, BasicBlock, RedisualBlock, OutputBlock
 
 
 class _InputBlock(nn.Module):

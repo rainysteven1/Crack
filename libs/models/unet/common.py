@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from typing import Optional
 
-from ..modules import Conv2dSame, InitModule
+from ..modules.base import Conv2dSame, InitModule
 
 
 class SingleBlock(InitModule):
