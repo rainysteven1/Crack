@@ -26,9 +26,7 @@ def predict(
     mode = test_settings["metrics_mode"]
     model = build_model(category)
     model.load_state_dict(torch.load(load_model_dir, map_location=DEVICE))
-    log_model_summary(
-        logger, model, batch_size, input_dim=input_dim, device=DEVICE, **data_attributes
-    )
+    log_model_summary(logger, model, batch_size, device=DEVICE, **data_attributes)
     logger.info(f"Loading Model State from {load_model_dir}")
 
     dataset = CrackDataset(
