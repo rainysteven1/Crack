@@ -25,9 +25,8 @@ class DeepLabV2(nn.Module):
         input_dim: int,
         output_dim: int,
         atrous_rates: list,
-        data_attributes: list,
-        is_custom_resnet: bool = True,
-        n_blocks: list = None,
+        is_custom_resnet: list,
+        n_blocks: list,
     ) -> None:
         super().__init__()
         n_dims = [64 * 2**p for p in range(6)]
@@ -43,13 +42,7 @@ class DeepLabV2(nn.Module):
             resnet_layers = [resnet.layer1, resnet.layer2, resnet.layer3, resnet.layer4]
             layer_list.extend(resnet_layers)
 
-        layer_list.extend(
-            [
-                ASPP_v2(n_dims[-1], output_dim, atrous_rates),
-                nn.Upsample(size=data_attributes, mode="bilinear", align_corners=True),
-                nn.Sigmoid(),
-            ]
-        )
+        layer_list.append(ASPP_v2(n_dims[-1], output_dim, atrous_rates))
         self.layers = nn.Sequential(*layer_list)
 
     def forward(self, input):
