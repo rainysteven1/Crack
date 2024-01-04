@@ -132,7 +132,7 @@
                 },
                 "lr_lambda": {
                   "type": "string",
-                  "enum": ["lr_schedule1", "lr_schedule2"]
+                  "enum": ["lr_schedule1", "lr_schedule2", "lr_schedule3"]
                 }
               },
               "required": ["name", "lr_lambda"]

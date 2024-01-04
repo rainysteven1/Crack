@@ -93,6 +93,10 @@ def lr_schedule2(epochs, y1=0.05, y2=1):
     )
 
 
+def lr_schedule3(epochs):
+    return lambda x: (1 - x / epochs) ** 0.9
+
+
 def get_scheduler(scheduler_settings: dict, optimizer, epochs: int = 100):
     if "name" in scheduler_settings:
         scheduler_class = SCHEDULER_DICT.get(scheduler_settings["name"])
@@ -103,6 +107,7 @@ def get_scheduler(scheduler_settings: dict, optimizer, epochs: int = 100):
                 "lr_schedule2": lr_schedule2(epochs)
                 if "lrf" not in scheduler_settings
                 else lr_schedule2(epochs, 1, scheduler_settings["lrf"]),
+                "lr_schedule3": lr_schedule3(epochs),
             }
             lr_lambda = lr_lambda_dict.get(scheduler_settings["lr_lambda"])
             scheduler = LambdaLR(optimizer, lr_lambda)
