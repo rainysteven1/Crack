@@ -59,7 +59,7 @@ def predict(
             x = x.to(DEVICE, dtype=torch.float32)
             y = y.to(DEVICE, dtype=torch.float32)
             outputs = model(x)
-            y_pred = y_pred if not isinstance(outputs, list) else outputs[-1]
+            y_pred = outputs if not isinstance(outputs, list) else outputs[-1]
             x_all = torch.cat((x_all, x), dim=0)
             y_true_all = torch.cat((y_true_all, y), dim=0)
             y_pred_all = torch.cat((y_pred_all, y_pred), dim=0)

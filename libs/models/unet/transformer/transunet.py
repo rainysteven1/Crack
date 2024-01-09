@@ -8,10 +8,11 @@ from ml_collections import ConfigDict
 from ..common import SingleBlock
 from ...modules.base import Conv2dSame
 from ...modules.transformer import Embeddings, TransformerEncoder
-from ...modules.transformer_config import get_b16_config
+from ...modules.transformer_config import *
 
 CONFIGS = {
     "ViT-B_16": get_b16_config(),
+    "R50-ViT-B_16": get_r50_b16_config(),
 }
 
 
@@ -41,7 +42,7 @@ class _Decoder(nn.Module):
         in_channels = [head_channel] + list(filters[:-1])
         out_channels = filters
         if config.n_skip != 0:
-            skip_channels = config.skip_filters
+            skip_channels = config.skip_channels
             for i in range(4 - config.n_skip):
                 skip_channels[3 - i] = 0
         else:
@@ -96,7 +97,7 @@ class TransUNet(nn.Module):
         input_dim: int,
         output_dim: int,
         img_size: int = 256,
-        config: ConfigDict = get_b16_config(),
+        config: ConfigDict = get_r50_b16_config(),
     ):
         super().__init__()
         self.config = config
@@ -112,8 +113,13 @@ class TransUNet(nn.Module):
 
     def forward(self, input):
         x = self.embeddings(input)
+        if isinstance(x, tuple):
+            features = x[1:]
+            x = x[0].squeeze()
+        else:
+            features = None
         x = self.encoder(x)
-        x = self.decoder(x)
+        x = self.decoder(x, features)
         x = self.segmentation_head(x)
         output = torch.sigmoid(x)
         return output

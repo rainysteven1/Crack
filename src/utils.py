@@ -1,4 +1,5 @@
 import io, math, sys
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -10,6 +11,13 @@ from src import DEVICE
 from src import MODEL_DICT, LOSS_DICT, OPTIMIZER_DICT, SCHEDULER_DICT
 
 INPUT_DIM = 3
+
+
+def np2th(weights: np.ndarray, conv: bool = False):
+    """
+    Possibly convert HWIO to OIHW
+    """
+    return torch.from_numpy(weights if not conv else weights.transpose([3, 2, 0, 1]))
 
 
 # https://github.com/pytorch/examples/blob/master/imagenet/main.py

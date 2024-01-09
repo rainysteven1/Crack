@@ -9,6 +9,8 @@ from torch.nn.modules.utils import _pair
 from typing import Optional
 
 from .base import Conv2dSame
+from .transformer_resnet import ResNetV2
+from ..utils import np2th
 
 ATTENTION_Q = "MultiHeadDotProductAttention_1/query"
 ATTENTION_K = "MultiHeadDotProductAttention_1/key"
@@ -18,13 +20,6 @@ FC_0 = "MlpBlock_3/Dense_0"
 FC_1 = "MlpBlock_3/Dense_1"
 ATTENTION_NORM = "LayerNorm_0"
 MLP_NORM = "LayerNorm_2"
-
-
-def np2th(weights: np.ndarray, conv: bool = False):
-    """
-    Possibly convert HWIO to OIHW
-    """
-    return torch.from_numpy(weights if not conv else weights.transpose([3, 2, 0, 1]))
 
 
 # TODO ResNet混合
@@ -45,6 +40,29 @@ class Embeddings(nn.Module):
         embeddings_dim = config.get("hidden_size")
         n_patches = (image_size[0] // patch_size) * (image_size[1] // patch_size)
 
+        if config.patches.get("grid") is not None:  # ResNet
+            grid_size = config.patches["grid"]
+            patch_size = (
+                image_size[0] // 16 // grid_size[0],
+                image_size[1] // 16 // grid_size[1],
+            )
+            patch_size_real = (patch_size[0] * 16, patch_size[1] * 16)
+            n_patches = (image_size[0] // patch_size_real[0]) * (
+                image_size[1] // patch_size_real[1]
+            )
+            self.hybrid = True
+            self.hybrid_model = ResNetV2(
+                block_units=config.resnet.num_layers,
+                width_factor=config.resnet.width_factor,
+            )
+            input_dim = self.hybrid_model.width * 16
+        else:
+            patch_size = _pair(config.patches["size"])
+            n_patches = (image_size[0] // patch_size[0]) * (
+                image_size[1] // patch_size[1]
+            )
+            self.hybrid = False
+
         self.classifier = config.get("classifier")
         self.patch_embeddings = Conv2dSame(
             input_dim, embeddings_dim, kernel_size=patch_size, stride=patch_size
@@ -53,13 +71,18 @@ class Embeddings(nn.Module):
             torch.zeros(1, n_patches, embeddings_dim)
         )
         self.dropout = nn.Dropout(config.transformer["dropout_rate"])
-        self.hybrid = False
 
     def forward(self, input):
-        x = self.patch_embeddings(input)
-        x = x.flatten(2).transpose(1, 2)
-        output = self.dropout(x + self.position_embeddings)
-        return output
+        x = input
+        features = None
+        if self.hybrid:
+            y = self.hybrid_model(input)
+            x = y[0]
+            features = y[1:]
+        x = self.patch_embeddings(x)
+        x = x.flatten(2).transpose(-1, -2)
+        output = self.dropout(x + self.position_embeddings).unsqueeze(-1)
+        return output, *features
 
     def load_from(self, weights):
         self.patch_embeddings.weight.copy_(
@@ -87,6 +110,20 @@ class Embeddings(nn.Module):
             posemb_grid = posemb_grid.reshape(1, gs_new * gs_new, -1)
             posemb = posemb_grid
             self.position_embeddings.copy_(np2th(posemb))
+
+        if self.hybrid:
+            self.hybrid_model.root.get_submodule("0").weight.copy_(
+                np2th(weights["conv_root/kernel"], conv=True)
+            )
+            self.hybrid_model.root.get_submodule("1").weight.copy_(
+                np2th(weights["gn_root/scale"]).view(-1)
+            )
+            self.hybrid_model.root.get_submodule("1").bias.copy_(
+                np2th(weights["gn_root/bias"]).view(-1)
+            )
+            for bname, block in self.hybrid_model.body.named_children():
+                for uname, unit in block.named_children():
+                    unit.load_from(weights, n_block=bname, n_unit=uname)
 
 
 # TODO
