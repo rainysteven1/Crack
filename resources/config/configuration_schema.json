@@ -22,7 +22,11 @@
           }
         }
       },
-      "required": ["data_path", "category_list", "img_dir_list"]
+      "required": [
+        "data_path",
+        "category_list",
+        "img_dir_list"
+      ]
     },
     "data attributes": {
       "type": "object",
@@ -34,7 +38,10 @@
           "type": "integer"
         }
       },
-      "required": ["batch_height", "batch_width"]
+      "required": [
+        "batch_height",
+        "batch_width"
+      ]
     },
     "train settings": {
       "type": "object",
@@ -48,7 +55,6 @@
         "train_split": {
           "type": "integer"
         },
-
         "criterion": {
           "type": "string",
           "enum": [
@@ -79,7 +85,9 @@
                   "type": "boolean"
                 }
               },
-              "required": ["name"]
+              "required": [
+                "name"
+              ]
             },
             {
               "type": "object",
@@ -101,7 +109,9 @@
                   "type": "boolean"
                 }
               },
-              "required": ["name"]
+              "required": [
+                "name"
+              ]
             },
             {
               "type": "object",
@@ -117,7 +127,9 @@
                   "type": "number"
                 }
               },
-              "required": ["name"]
+              "required": [
+                "name"
+              ]
             }
           ]
         },
@@ -126,38 +138,82 @@
             {
               "type": "object",
               "properties": {
-                "name": { "type": "string", "const": "LambdaLR" },
+                "name": {
+                  "type": "string",
+                  "const": "LambdaLR"
+                },
                 "lrf": {
                   "type": "number"
                 },
                 "lr_lambda": {
                   "type": "string",
-                  "enum": ["lr_schedule1", "lr_schedule2", "lr_schedule3"]
+                  "enum": [
+                    "lr_schedule1",
+                    "lr_schedule2",
+                    "lr_schedule3"
+                  ]
                 }
               },
-              "required": ["name", "lr_lambda"]
+              "required": [
+                "name",
+                "lr_lambda"
+              ]
             },
             {
               "type": "object",
               "properties": {
-                "name": { "type": "string", "const": "ReduceLROnPlateau" },
-                "mode": { "type": "string", "enum": ["max", "min"] },
-                "patience": { "type": "integer" }
+                "name": {
+                  "type": "string",
+                  "const": "ReduceLROnPlateau"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "max",
+                    "min"
+                  ]
+                },
+                "patience": {
+                  "type": "integer"
+                }
               },
-              "required": ["name"]
+              "required": [
+                "name"
+              ]
             },
             {
               "type": "object",
               "properties": {
-                "name": { "type": "string", "const": "CosineAnnealingLR" },
-                "T_max": { "type": "integer" },
-                "eta_min": { "type": "number" }
+                "name": {
+                  "type": "string",
+                  "const": "CosineAnnealingLR"
+                },
+                "T_max": {
+                  "type": "integer"
+                },
+                "eta_min": {
+                  "type": "number"
+                }
               },
-              "required": ["name"]
+              "required": [
+                "name"
+              ]
             }
           ]
         },
-        "early_stopping_patience": { "type": "integer" }
+        "early_stopping_patience": {
+          "type": "integer"
+        },
+        "config": {
+          "type": "string",
+          "enum": [
+            "ViT-B_16",
+            "R50-ViT-B_16",
+            "ViT-B_32",
+            "ViT-L_16",
+            "ViT-L_32"
+          ]
+        }
       },
       "required": [
         "batch_size",
@@ -179,9 +235,17 @@
         },
         "metrics_mode": {
           "type": "string"
+        },
+        "config": {
+          "type": "string",
+          "const": "testing"
         }
       },
-      "required": ["best_last", "batch_size", "metrics_mode"]
+      "required": [
+        "best_last",
+        "batch_size",
+        "metrics_mode"
+      ]
     },
     "result settings": {
       "type": "object",
@@ -193,7 +257,9 @@
           }
         }
       },
-      "required": ["folder_list"]
+      "required": [
+        "folder_list"
+      ]
     }
   },
   "required": [

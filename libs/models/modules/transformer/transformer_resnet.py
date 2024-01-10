@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from collections import OrderedDict
 
-from ..utils import np2th
+from ...utils import np2th
 
 
 class StdConv2d(nn.Conv2d):

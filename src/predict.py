@@ -20,11 +20,14 @@ def predict(
     load_model_dir: str,
     path_dict: dict,
     data_attributes: dict,
+    train_settings: dict,
     test_settings: dict,
 ):
     batch_size = test_settings["batch_size"]
     mode = test_settings["metrics_mode"]
-    model = build_model(category)
+    train_config = train_settings["config"] if "config" in train_settings else None
+    test_config = test_settings["config"] if "config" in test_settings else None
+    model = build_model(category, train_config, test_config)
     model.load_state_dict(torch.load(load_model_dir, map_location=DEVICE))
     log_model_summary(logger, model, batch_size, device=DEVICE, **data_attributes)
     logger.info(f"Loading Model State from {load_model_dir}")

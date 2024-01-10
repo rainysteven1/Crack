@@ -77,7 +77,8 @@ def train(
     train_metric_record = MetricRecord()
     validation_metric_record = MetricRecord()
 
-    model = build_model(category)
+    config = train_settings["config"] if "config" in train_settings else None
+    model = build_model(category, train_config=config)
     log_model_summary(logger, model, batch_size, device=DEVICE, **data_attributes)
     optimizer = get_optimizer(train_settings["optimizer"], model)
     criterion = get_criterion(train_settings["criterion"])

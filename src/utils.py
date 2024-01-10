@@ -6,6 +6,7 @@ import torch.nn as nn
 from logging import Logger
 from torch.optim.lr_scheduler import LambdaLR
 from torchsummary import summary
+from typing import Optional
 
 from src import DEVICE
 from src import MODEL_DICT, LOSS_DICT, OPTIMIZER_DICT, SCHEDULER_DICT
@@ -64,8 +65,14 @@ def log_model_summary(
     logger.info("Model:\n{}".format(summary_output))
 
 
-def build_model(category: str):
-    return MODEL_DICT.get(category)(INPUT_DIM, output_dim=1).to(DEVICE)
+def build_model(
+    category: str, train_config: Optional[str] = None, test_config: Optional[str] = None
+):
+    if not train_config:
+        return MODEL_DICT.get(category)(INPUT_DIM, output_dim=1).to(DEVICE)
+    return MODEL_DICT.get(category)(
+        INPUT_DIM, output_dim=1, train_config=train_config, test_config=test_config
+    ).to(DEVICE)
 
 
 def get_criterion(category: str):

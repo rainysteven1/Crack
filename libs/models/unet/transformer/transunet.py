@@ -4,16 +4,11 @@ import torch
 import torch.nn as nn
 
 from ml_collections import ConfigDict
+from typing import Optional
 
 from ..common import SingleBlock
 from ...modules.base import Conv2dSame
-from ...modules.transformer import Embeddings, TransformerEncoder
-from ...modules.transformer_config import *
-
-CONFIGS = {
-    "ViT-B_16": get_b16_config(),
-    "R50-ViT-B_16": get_r50_b16_config(),
-}
+from ...modules.transformer import *
 
 
 class _DecoderBlock(nn.Module):
@@ -97,27 +92,36 @@ class TransUNet(nn.Module):
         input_dim: int,
         output_dim: int,
         img_size: int = 256,
-        config: ConfigDict = get_r50_b16_config(),
+        train_config: Optional[str] = "ViT-B_16",
+        test_config: Optional[str] = None,
     ):
         super().__init__()
-        self.config = config
+        self.config = (
+            CONFIGS.get(train_config)()
+            if not test_config
+            else CONFIGS.get(test_config)(train_config)
+        )
+        print(self.config)
 
-        self.embeddings = Embeddings(input_dim, img_size, config)
-        self.encoder = TransformerEncoder(config)
-        self.decoder = _Decoder(config)
+        self.embeddings = Embeddings(input_dim, img_size, self.config)
+        self.encoder = Encoder(self.config)
+        self.decoder = _Decoder(self.config)
         self.segmentation_head = _SegmentationHead(
-            config["decoder_channels"][-1], output_dim
+            self.config["decoder_channels"][-1], output_dim
         )
 
-        self._load_from()
+        if not test_config:
+            print("hello")
+            self._load_from()
 
     def forward(self, input):
         x = self.embeddings(input)
         if isinstance(x, tuple):
             features = x[1:]
-            x = x[0].squeeze()
+            x = x[0]
         else:
             features = None
+        x = x.squeeze()
         x = self.encoder(x)
         x = self.decoder(x, features)
         x = self.segmentation_head(x)

@@ -8,9 +8,9 @@ from scipy import ndimage
 from torch.nn.modules.utils import _pair
 from typing import Optional
 
-from .base import Conv2dSame
 from .transformer_resnet import ResNetV2
-from ..utils import np2th
+from ..base import Conv2dSame
+from ...utils import np2th
 
 ATTENTION_Q = "MultiHeadDotProductAttention_1/query"
 ATTENTION_K = "MultiHeadDotProductAttention_1/key"
@@ -22,7 +22,6 @@ ATTENTION_NORM = "LayerNorm_0"
 MLP_NORM = "LayerNorm_2"
 
 
-# TODO ResNet混合
 class Embeddings(nn.Module):
     """
     Construct the embeddings from patch, position embeddings
@@ -82,7 +81,7 @@ class Embeddings(nn.Module):
         x = self.patch_embeddings(x)
         x = x.flatten(2).transpose(-1, -2)
         output = self.dropout(x + self.position_embeddings).unsqueeze(-1)
-        return output, *features
+        return (output, *features) if features else output
 
     def load_from(self, weights):
         self.patch_embeddings.weight.copy_(
@@ -126,7 +125,6 @@ class Embeddings(nn.Module):
                     unit.load_from(weights, n_block=bname, n_unit=uname)
 
 
-# TODO
 class _Attention(nn.Module):
     def __init__(self, input_dim: int, n_heads: int = 12):
         super().__init__()
@@ -296,7 +294,7 @@ class _EncoderBlock(nn.Module):
             )
 
 
-class TransformerEncoder(nn.Module):
+class Encoder(nn.Module):
     """
     Transformer Encoder
     """

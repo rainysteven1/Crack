@@ -139,6 +139,7 @@ if __name__ == "__main__":
             load_model_dir,
             path_dict,
             data_attributes,
+            train_settings,
             test_settings,
         )
         if "data" in data_dict["Prediction"]:
