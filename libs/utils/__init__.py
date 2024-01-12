@@ -21,6 +21,7 @@ LOSS_DICT = {
 
 
 SCHEDULER_DICT = {
+    "StepLR": scheduler.StepLR,
     "LambdaLR": scheduler.LambdaLR,
     "CosineAnnealingLR": scheduler.CosineAnnealingLR,
     "ReduceLROnPlateau": scheduler.ReduceLROnPlateau,

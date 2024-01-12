@@ -7,6 +7,7 @@ MODEL_DICT = {
     "attention_unet_pp": AttentionUNet2Plus,
     "deeplabv2": DeepLabV2,
     "double_unet": DoubleUNet,
+    "segnet": SegNet,
     "unet": UNet,
     "unet_pp": UNet2Plus,
     "unet_ppp": UNet3PlusDeepSupCGM,

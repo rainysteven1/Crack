@@ -101,7 +101,6 @@ class TransUNet(nn.Module):
             if not test_config
             else CONFIGS.get(test_config)(train_config)
         )
-        print(self.config)
 
         self.embeddings = Embeddings(input_dim, img_size, self.config)
         self.encoder = Encoder(self.config)
@@ -111,7 +110,6 @@ class TransUNet(nn.Module):
         )
 
         if not test_config:
-            print("hello")
             self._load_from()
 
     def forward(self, input):
