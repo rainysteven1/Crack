@@ -53,16 +53,20 @@ class _Decoder(nn.Module):
         )
 
     def forward(self, input, skips=None):
-        (n_batch, n_patch, hidden) = input.size()
-        height, width = int(math.sqrt(n_patch)), int(math.sqrt(n_patch))
-        x = input.permute(0, 2, 1)
-        x = x.contiguous().view(n_batch, hidden, height, width)
+        x = self._reshape_input(input)
         x = self.conv_block(x)
         for idx, module in enumerate(self.layers):
             skip = (
                 None if not skips else skips[idx] if idx < self.config.n_skip else None
             )
             x = module(x, skip)
+        return x
+
+    def _reshape_input(self, input):
+        (n_batch, n_patch, hidden) = input.size()
+        height, width = int(math.sqrt(n_patch)), int(math.sqrt(n_patch))
+        x = input.permute(0, 2, 1)
+        x = x.contiguous().view(n_batch, hidden, height, width)
         return x
 
 
@@ -102,8 +106,7 @@ class TransUNet(nn.Module):
             else CONFIGS.get(test_config)(train_config)
         )
 
-        self.embeddings = Embeddings(input_dim, img_size, self.config)
-        self.encoder = Encoder(self.config)
+        self.encoder = TransModel(input_dim, img_size, self.config)
         self.decoder = _Decoder(self.config)
         self.segmentation_head = _SegmentationHead(
             self.config["decoder_channels"][-1], output_dim
@@ -113,14 +116,13 @@ class TransUNet(nn.Module):
             self._load_from()
 
     def forward(self, input):
-        x = self.embeddings(input)
+        x = self.encoder(input)
         if isinstance(x, tuple):
             features = x[1:]
             x = x[0]
         else:
             features = None
         x = x.squeeze()
-        x = self.encoder(x)
         x = self.decoder(x, features)
         x = self.segmentation_head(x)
         output = torch.sigmoid(x)
@@ -129,5 +131,4 @@ class TransUNet(nn.Module):
     def _load_from(self):
         weights = np.load(self.config.pretrained_path)
         with torch.no_grad():
-            self.embeddings.load_from(weights)
             self.encoder.load_from(weights)

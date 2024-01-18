@@ -22,7 +22,7 @@ ATTENTION_NORM = "LayerNorm_0"
 MLP_NORM = "LayerNorm_2"
 
 
-class Embeddings(nn.Module):
+class _Embeddings(nn.Module):
     """
     Construct the embeddings from patch, position embeddings
     """
@@ -33,7 +33,7 @@ class Embeddings(nn.Module):
         image_size: int,
         config: ConfigDict,
     ):
-        super(Embeddings, self).__init__()
+        super().__init__()
         image_size = _pair(image_size)
         patch_size = config.get("patch_size")
         embeddings_dim = config.get("hidden_size")
@@ -126,10 +126,11 @@ class Embeddings(nn.Module):
 
 
 class _Attention(nn.Module):
-    def __init__(self, input_dim: int, n_heads: int = 12):
+    def __init__(self, input_dim: int, config: ConfigDict):
         super().__init__()
-        self.n_heads = n_heads
-        self.head_size = input_dim // n_heads
+        attn_dropout_rate = config["transformer"]["attn_dropout_rate"]
+        self.n_heads = config["transformer"]["n_heads"]
+        self.head_size = input_dim // self.n_heads
         self.all_head_size = self.n_heads * self.head_size
 
         self.query = nn.Linear(input_dim, self.all_head_size)
@@ -137,8 +138,8 @@ class _Attention(nn.Module):
         self.value = nn.Linear(input_dim, self.all_head_size)
 
         self.proj = nn.Linear(input_dim, input_dim)
-        self.attn_dropout = nn.Dropout(0.0)
-        self.proj_dropout = nn.Dropout(0.0)
+        self.attn_dropout = nn.Dropout(attn_dropout_rate)
+        self.proj_dropout = nn.Dropout(attn_dropout_rate)
         self.softmax = nn.Softmax(dim=-1)
 
     def transpose_for_scores(self, x):
@@ -202,15 +203,14 @@ class _MLP(nn.Module):
         return output
 
 
-class _EncoderBlock(nn.Module):
-    def __init__(self, input_dim: int, mlp_ratio: int = 4) -> None:
+class _TransLayer(nn.Module):
+    def __init__(self, input_dim: int, config: ConfigDict) -> None:
         super().__init__()
-        mlp_hidden_dim = int(input_dim * mlp_ratio)
 
         self.hidden_size = input_dim
-        self.attn = _Attention(input_dim)
+        self.attn = _Attention(input_dim, config)
         self.attn_norm = nn.LayerNorm(input_dim, eps=1e-6)
-        self.mlp = _MLP(input_dim, mlp_hidden_dim)
+        self.mlp = _MLP(input_dim, config["transformer"]["mlp_dim"])
         self.mlp_norm = nn.LayerNorm(input_dim, eps=1e-6)
         self.dropout = nn.Dropout(0.0)
 
@@ -294,23 +294,39 @@ class _EncoderBlock(nn.Module):
             )
 
 
-class Encoder(nn.Module):
+class _TransEncoder(nn.Module):
     """
     Transformer Encoder
     """
 
-    def __init__(self, config: ConfigDict):
+    def __init__(self, config: ConfigDict, return_intermediate: bool):
         super().__init__()
         embedding_dim = config.get("hidden_size")
         n_layers = config["transformer"].get("n_layers")
+        self.intermediate_indicies = [
+            config["transformer"]["n_heads"] / 4 * i - 1 for i in range(1, 5)
+        ]
+        self.return_intermediate = return_intermediate
 
-        self.layers = nn.Sequential(
-            *[_EncoderBlock(embedding_dim) for _ in range(n_layers)]
+        layer_list = [_TransLayer(embedding_dim, config) for _ in range(n_layers)]
+
+        self.layers = (
+            nn.ModuleList(layer_list)
+            if return_intermediate
+            else nn.Sequential(*layer_list)
         )
         self.norm = nn.LayerNorm(embedding_dim, eps=1e-6)
 
     def forward(self, input):
-        return self.norm(self.layers(input))
+        if not self.return_intermediate:
+            return self.norm(self.layers(input))
+        intermediate_outputs = list()
+        x = input
+        for idx, module in enumerate(self.layers):
+            x = module(x)
+            if idx in self.intermediate_indicies:
+                intermediate_outputs.append(x)
+        return tuple(intermediate_outputs)
 
     def load_from(self, weights):
         self.norm.weight.copy_(np2th(weights["Transformer/encoder_norm/scale"]))
@@ -319,3 +335,38 @@ class Encoder(nn.Module):
         for _, block in self.named_children():
             for uname, unit in block.named_children():
                 unit.load_from(weights, n_block=uname)
+
+
+class TransModel(nn.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        img_size: int,
+        config: ConfigDict,
+        return_intermediate: bool = False,
+    ):
+        super().__init__()
+        self.return_intermediate = return_intermediate
+
+        self.embeddings = _Embeddings(input_dim, img_size, config)
+        self.encoder = _TransEncoder(config, return_intermediate)
+
+    def forward(self, input):
+        x = self.embeddings(input)
+        if isinstance(x, tuple):
+            features = list(x[1:])
+            x = x[0]
+        else:
+            features = None
+        x = x.squeeze()
+        x = self.encoder(x)
+        if not self.return_intermediate:
+            output = x.unsqueeze(-1)
+            return (output, *features) if features else output
+        outputs = [output.unsqueeze(-1) for output in x]
+        outputs = outputs.extend(features) if features else outputs
+        return tuple(outputs)
+
+    def load_from(self, weights):
+        self.embeddings.load_from(weights)
+        self.encoder.load_from(weights)

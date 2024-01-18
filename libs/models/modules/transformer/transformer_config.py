@@ -19,7 +19,7 @@ def get_b16_config():
     config.transformer.mlp_dim = config.hidden_size * 4
     config.transformer.n_heads = 12
     config.transformer.n_layers = 12
-    config.transformer.attention_dropout_rate = 0.0
+    config.transformer.attn_dropout_rate = 0.0
     config.transformer.dropout_rate = 0.1
 
     config.decoder_channels = (256, 128, 64, 16)
@@ -77,7 +77,7 @@ def get_l16_config():
     config.transformer.mlp_dim = config.hidden_size * 4
     config.transformer.n_heads = 16
     config.transformer.n_layers = 24
-    config.transformer.attention_dropout_rate = 0.0
+    config.transformer.attn_dropout_rate = 0.0
     config.transformer.dropout_rate = 0.1
 
     config.decoder_channels = (256, 128, 64, 16)
