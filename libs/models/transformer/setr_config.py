@@ -15,10 +15,9 @@ def get_b16_config():
     config.transformer.n_heads = 16
     config.transformer.n_layers = 24
     config.transformer.attn_dropout_rate = 0.1
-    config.transformer.dropout_rate = 0.1
 
-    config.decoder_classifier = "mla"
-    config.decoder_channels = (512, 256, 128, 64)
+    config.decoder_classifier = "PUP"
+    config.decoder_channels = (256, 256, 256, 256)
     return config
 
 

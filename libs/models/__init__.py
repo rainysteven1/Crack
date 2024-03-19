@@ -1,6 +1,7 @@
 from .unet import *
 from .resunet import *
 from .deeplab import *
+from .transformer import *
 
 MODEL_DICT = {
     "attention_unet": AttentionUNet,
@@ -15,5 +16,6 @@ MODEL_DICT = {
     "resunet1": ResUNet1,
     "resunet_pool": ResUNetPool,
     "resunet_pp": ResUNet2Plus,
+    "setr": SETR,
     "transunet": TransUNet,
 }

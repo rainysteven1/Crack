@@ -1,5 +1,4 @@
 import math
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -16,8 +15,8 @@ class _Decoder_PUP(nn.Module):
     def __init__(self, output_dim: int, config: ConfigDict):
         super().__init__()
         in_channels = [config.get("hidden_size")] + list(
-            config.get("decoder_channels")[:-1]
-        )
+            config.get("decoder_channels")
+        )[:-1]
         out_channels = config.get("decoder_channels")
 
         self.layers = nn.Sequential(
@@ -26,12 +25,11 @@ class _Decoder_PUP(nn.Module):
                     SingleBlock(in_channel, out_channel),
                     nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
                 )
-                for (in_channel, out_channel) in zip(in_channels, out_channels)
+                for in_channel, out_channel in zip(in_channels, out_channels)
             ]
         )
-        self.output_block = OutputBlock(
-            config.get("decoder_channels")[-1], output_dim, kernel_size=3
-        )
+
+        self.output_block = OutputBlock(out_channels[-1], output_dim)
 
     def forward(self, input: torch.Tensor):
         x = self._reshape_input(input)
@@ -137,7 +135,7 @@ class SETR(nn.Module):
             if not test_config
             else CONFIGS.get(test_config)(train_config)
         )
-        self.return_intermediate = self.config.get("decoder_classifier") == "mla"
+        self.return_intermediate = self.config.get("decoder_classifier") == "MLA"
 
         self.encoder = TransModel(
             input_dim, img_size, self.config, self.return_intermediate
