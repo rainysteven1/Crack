@@ -362,9 +362,9 @@ class TransModel(nn.Module):
         x = self.encoder(x)
         if not self.return_intermediate:
             output = x.unsqueeze(-1)
-            return (output, *features) if features else output
+            return (output, *features) if features is not None else output
         outputs = [output.unsqueeze(-1) for output in x]
-        outputs = outputs.extend(features) if features else outputs
+        outputs = (outputs + features) if features is not None else outputs
         return tuple(outputs)
 
     def load_from(self, weights):

@@ -15,6 +15,8 @@ class SingleBlock(InitModule):
         stride: int = 1,
         padding: str | int = 1,
         is_batchNorm=True,
+        is_relu=True,
+        is_bias=True,
         init_type: Optional[str] = None,
     ):
         super().__init__(init_type)
@@ -25,9 +27,11 @@ class SingleBlock(InitModule):
                 kernel_size=kernel_size,
                 stride=stride,
                 padding=padding,
+                bias=is_bias,
             ),
-            nn.ReLU(),
         ]
+        if is_relu:
+            layer_list.append(nn.ReLU())
         if is_batchNorm:
             layer_list.insert(1, nn.BatchNorm2d(output_dim))
         self.layers = nn.Sequential(*layer_list)

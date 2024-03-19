@@ -1,3 +1,5 @@
+import ml_collections
+
 from ..modules.transformer import transformer_config
 
 
@@ -20,6 +22,24 @@ def get_b16_config():
     return config
 
 
+def get_r50_b16_config():
+    """
+    Returns the Resnet50 + ViT-B/16 configuration
+    """
+    config = get_b16_config()
+
+    config.pretrained_path = "resources/checkpoints/R50+ViT-B_16.npz"
+
+    config.patches.grid = (16, 16)
+    config.resnet = ml_collections.ConfigDict()
+    config.resnet.num_layers = (3, 4, 9)
+    config.resnet.width_factor = 1
+
+    config.skip_channels = [512, 256, 64, 16]
+    return config
+
+
 CONFIGS = {
     "ViT-B_16": get_b16_config,
+    "R50-VIT-B_16": get_r50_b16_config,
 }

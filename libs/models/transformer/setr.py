@@ -121,6 +121,7 @@ class _Decoder_MLA(nn.Module):
         return x
 
 
+# TODO auxiliary loss
 class SETR(nn.Module):
     def __init__(
         self,
@@ -151,17 +152,14 @@ class SETR(nn.Module):
         x = self.encoder(input)
         if not isinstance(x, tuple):
             x = x.squeeze()
-            features = None
             output = self.decoder(x)
         else:
             if not self.return_intermediate:
                 x = x[0]
                 x = x.squeeze()
-                features = x[1:]
                 output = self.decoder(x)
             else:
                 x = x[:4]
                 x = [temp.squeeze() for temp in x]
-                features = x[4:]
                 output = self.decoder(*x)
         return output

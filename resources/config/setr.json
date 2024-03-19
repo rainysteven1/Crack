@@ -1,0 +1,52 @@
+{
+    "data path": {
+        "data_path": "/Users/rainy/code/deep-learning/Segmentations/U-Net/Crack/resources/data/crack500",
+        "category_list": [
+            "train",
+            "test",
+            "validation"
+        ],
+        "img_dir_list": [
+            "image",
+            "groundtruth",
+            "mask"
+        ]
+    },
+    "data attributes": {
+        "batch_height": 256,
+        "batch_width": 256
+    },
+    "train settings": {
+        "batch_size": 4,
+        "N_epochs": 100,
+        "train_split": 1500,
+        "criterion": "BCEDiceLoss",
+        "optimizer": {
+            "name": "Adam",
+            "lr": 1e-5,
+            "weight_decay": 1e-5
+        },
+        "scheduler": {
+            "name": "ReduceLROnPlateau",
+            "mode": "min",
+            "patience": 5
+        },
+        "early_stopping_patience": 50,
+        "config": "ViT-B_16"
+    },
+    "test settings": {
+        "best_last": "best",
+        "batch_size": 8,
+        "metrics_mode": "gpu",
+        "config": "testing"
+    },
+    "result settings": {
+        "folder_list": [
+            "code",
+            "config",
+            "figure",
+            "log",
+            "model"
+        ]
+    }
+}
