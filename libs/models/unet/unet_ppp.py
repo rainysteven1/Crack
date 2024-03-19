@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from .common import SingleBlock, Encoder
-from ..modules.base import Conv2dSame, OutputBlock, InitModule
+from .common import Encoder
+from ..modules.base import Conv2dSame, InitModule, OutputBlock, SingleBlock
 
 
 class _DecoderBlock(nn.Module):

@@ -6,9 +6,8 @@ from ml_collections import ConfigDict
 from typing import Optional
 
 from .setr_config import CONFIGS
-from ..modules.base import Conv2dSame, OutputBlock
+from ..modules.base import Conv2dSame, OutputBlock, SingleBlock
 from ..modules.transformer import TransModel
-from ..unet.common import SingleBlock
 
 
 class _Decoder_PUP(nn.Module):

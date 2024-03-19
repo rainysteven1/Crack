@@ -3,8 +3,7 @@ import torch.nn.functional as F
 
 from torchvision.models.vgg import vgg16, VGG16_Weights
 
-from .common import SingleBlock
-from ..modules.base import OutputBlock
+from ..modules.base import OutputBlock, SingleBlock
 
 
 class _EncoderBlock(nn.Sequential):

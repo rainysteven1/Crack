@@ -60,7 +60,7 @@ class Conv2dSame(nn.Conv2d):
         )
 
 
-class BasicBlock(nn.Module):
+class BasicBlock(nn.Sequential):
     def __init__(
         self,
         input_dim: int,
@@ -69,21 +69,19 @@ class BasicBlock(nn.Module):
         stride: int = 1,
         padding: str | int = "same",
     ) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.BatchNorm2d(input_dim),
-            nn.ReLU(),
-            Conv2dSame(
-                input_dim,
-                output_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-            ),
+        super().__init__(
+            *[
+                nn.BatchNorm2d(input_dim),
+                nn.ReLU(),
+                Conv2dSame(
+                    input_dim,
+                    output_dim,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=padding,
+                ),
+            ]
         )
-
-    def forward(self, x):
-        return self.layers(x)
 
 
 class RedisualBlock(nn.Module):
@@ -131,7 +129,47 @@ class SqueezeExciteBlock(nn.Module):
         return output
 
 
-class OutputBlock(InitModule):
+class SingleBlock(InitModule):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        padding: str | int = 1,
+        is_batchNorm=True,
+        is_relu=True,
+        is_bias=True,
+        init_type: Optional[str] = None,
+    ):
+        super().__init__(init_type)
+        layer_list = [
+            Conv2dSame(
+                input_dim,
+                output_dim,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                bias=is_bias,
+            ),
+        ]
+        if is_relu:
+            layer_list.append(nn.ReLU())
+        if is_batchNorm:
+            layer_list.insert(1, nn.BatchNorm2d(output_dim))
+        self.layers = nn.Sequential(*layer_list)
+
+        if self.init_type:
+            self._initialize_weights()
+
+    def forward(self, x):
+        return self.layers(x)
+
+    def _initialize_weights(self):
+        self.layers.apply(lambda m: self.init(m))
+
+
+class OutputBlock(nn.Sequential):
     def __init__(
         self,
         input_dim: int,
@@ -140,23 +178,17 @@ class OutputBlock(InitModule):
         is_bn: bool = False,
         init_type: Optional[str] = None,
     ) -> None:
-        super().__init__(init_type)
-
-        self.layer_list = [
-            nn.Sequential(
-                Conv2dSame(input_dim, output_dim, kernel_size, padding="same"),
+        super().__init__(
+            *[
+                SingleBlock(
+                    input_dim,
+                    output_dim,
+                    kernel_size,
+                    padding="same",
+                    is_relu=False,
+                    is_batchNorm=is_bn,
+                    init_type=init_type,
+                ),
                 nn.Sigmoid(),
-            )
-        ]
-        if is_bn:
-            self.layer_list.insert(1, nn.BatchNorm2d(output_dim))
-        self.layers = nn.Sequential(*self.layer_list)
-
-        if self.init_type:
-            self._initialize_weights()
-
-    def forward(self, input):
-        return self.layers(input)
-
-    def _initialize_weights(self):
-        self.layers.apply(lambda m: self.init(m))
+            ],
+        )

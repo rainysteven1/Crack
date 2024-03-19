@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from .common import SingleBlock, ConvBlock, Encoder, AttentionBlock
-from ..modules.base import OutputBlock, InitModule
+from .common import AttentionBlock, ConvBlock, Encoder
+from ..modules.base import InitModule, OutputBlock, SingleBlock
 
 
 class _DecoderBlock(InitModule):
@@ -19,10 +19,12 @@ class _DecoderBlock(InitModule):
             skip_dim = output_dim
 
         self.up_conv = nn.Sequential(
-            nn.Upsample(scale_factor=2)
-            if is_upsample
-            else nn.ConvTranspose2d(
-                input_dim, output_dim, kernel_size=4, stride=2, padding=1
+            (
+                nn.Upsample(scale_factor=2)
+                if is_upsample
+                else nn.ConvTranspose2d(
+                    input_dim, output_dim, kernel_size=4, stride=2, padding=1
+                )
             ),
             SingleBlock(input_dim, output_dim, init_type=init_type),
         )

@@ -6,8 +6,7 @@ import torch.nn as nn
 from ml_collections import ConfigDict
 from typing import Optional
 
-from ..common import SingleBlock
-from ...modules.base import Conv2dSame
+from ...modules.base import Conv2dSame, SingleBlock
 from ...modules.transformer import *
 
 

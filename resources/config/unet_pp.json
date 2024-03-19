@@ -1,8 +1,16 @@
 {
   "data path": {
-    "data_path": "/Users/rainy/code/deep-learning/Data/crack500",
-    "category_list": ["train", "test", "validation"],
-    "img_dir_list": ["image", "groundtruth", "mask"]
+    "data_path": "/Users/rainy/code/deep-learning/Segmentations/U-Net/Crack/resources/data/crack500",
+    "category_list": [
+      "train",
+      "test",
+      "validation"
+    ],
+    "img_dir_list": [
+      "image",
+      "groundtruth",
+      "mask"
+    ]
   },
   "data attributes": {
     "batch_height": 256,
@@ -15,15 +23,15 @@
     "criterion": "BCEDiceLoss",
     "optimizer": {
       "name": "SGD",
-      "lr": 1e-3,
+      "lr": 0.001,
       "momentum": 0.9,
-      "weight_decay": 1e-4,
+      "weight_decay": 0.0001,
       "nesterov": false
     },
     "scheduler": {
       "name": "CosineAnnealingLR",
       "T_max": 100,
-      "eta_min": 1e-5
+      "eta_min": 0.00001
     },
     "early_stopping_patience": -1
   },
@@ -33,6 +41,12 @@
     "metrics_mode": "gpu"
   },
   "result settings": {
-    "folder_list": ["code", "config", "figure", "log", "model"]
+    "folder_list": [
+      "code",
+      "config",
+      "figure",
+      "log",
+      "model"
+    ]
   }
 }

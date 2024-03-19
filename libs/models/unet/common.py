@@ -1,52 +1,10 @@
 import torch
 import torch.nn as nn
 
-from typing import Optional
-
-from ..modules.base import Conv2dSame, InitModule
+from ..modules.base import Conv2dSame, SingleBlock
 
 
-class SingleBlock(InitModule):
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        kernel_size: int = 3,
-        stride: int = 1,
-        padding: str | int = 1,
-        is_batchNorm=True,
-        is_relu=True,
-        is_bias=True,
-        init_type: Optional[str] = None,
-    ):
-        super().__init__(init_type)
-        layer_list = [
-            Conv2dSame(
-                input_dim,
-                output_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                bias=is_bias,
-            ),
-        ]
-        if is_relu:
-            layer_list.append(nn.ReLU())
-        if is_batchNorm:
-            layer_list.insert(1, nn.BatchNorm2d(output_dim))
-        self.layers = nn.Sequential(*layer_list)
-
-        if self.init_type:
-            self._initialize_weights()
-
-    def forward(self, x):
-        return self.layers(x)
-
-    def _initialize_weights(self):
-        self.layers.apply(lambda m: self.init(m))
-
-
-class ConvBlock(nn.Module):
+class ConvBlock(nn.Sequential):
     def __init__(
         self,
         input_dim: int,
@@ -58,45 +16,41 @@ class ConvBlock(nn.Module):
         is_batchNorm=True,
         init_type=None,
     ) -> None:
-        super().__init__()
         if not middle_dim:
             middle_dim = output_dim
 
-        self.layers = nn.Sequential(
-            SingleBlock(
-                input_dim,
-                middle_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                is_batchNorm=is_batchNorm,
-                init_type=init_type,
-            ),
-            SingleBlock(
-                middle_dim,
-                output_dim,
-                kernel_size=kernel_size,
-                stride=stride,
-                padding=padding,
-                is_batchNorm=is_batchNorm,
-                init_type=init_type,
-            ),
+        super().__init__(
+            *[
+                SingleBlock(
+                    input_dim,
+                    middle_dim,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=padding,
+                    is_batchNorm=is_batchNorm,
+                    init_type=init_type,
+                ),
+                SingleBlock(
+                    middle_dim,
+                    output_dim,
+                    kernel_size=kernel_size,
+                    stride=stride,
+                    padding=padding,
+                    is_batchNorm=is_batchNorm,
+                    init_type=init_type,
+                ),
+            ]
         )
 
-    def forward(self, x):
-        return self.layers(x)
 
-
-class EncoderBlock(nn.Module):
+class EncoderBlock(nn.Sequential):
     def __init__(self, input_dim: int, output_dim: int, init_type=None) -> None:
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.MaxPool2d(kernel_size=2),
-            ConvBlock(input_dim, output_dim, init_type=init_type),
+        super().__init__(
+            *[
+                nn.MaxPool2d(kernel_size=2),
+                ConvBlock(input_dim, output_dim, init_type=init_type),
+            ]
         )
-
-    def forward(self, x):
-        return self.layers(x)
 
 
 class Encoder(nn.Module):
