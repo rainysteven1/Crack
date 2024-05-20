@@ -1,0 +1,23 @@
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: src.models.components.modules.losses.BCEDiceLoss
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.0001
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  patience: 5
+
+net:
+  _target_: src.models.components.unet.double_unet.DoubleUNet
+  input_dim: 3
+  output_dim: 1
+
+# compile model for faster training with pytorch 2.0
+compile: false
