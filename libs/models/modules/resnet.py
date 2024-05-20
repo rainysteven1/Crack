@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .attention import BoT_MHSA
-from .base import SingleBlock
+from .base import BasicBlock
 
 PRETRAINED_MODELS = {
     "resnet34": "resources/checkpoints/resnet34-333f7ec4.pth",
@@ -15,6 +15,7 @@ PRETRAINED_MODELS = {
 
 
 class RedisualBlock(nn.Module):
+
     expansion = 1
 
     def __init__(
@@ -33,7 +34,7 @@ class RedisualBlock(nn.Module):
         super().__init__()
 
         self.conv_block = nn.Sequential(
-            SingleBlock(
+            BasicBlock(
                 input_dim,
                 output_dim,
                 stride=stride,
@@ -41,7 +42,7 @@ class RedisualBlock(nn.Module):
                 reversed=reversed,
                 init_type=init_type,
             ),
-            SingleBlock(
+            BasicBlock(
                 output_dim,
                 output_dim,
                 is_bn=is_bn,
@@ -54,7 +55,7 @@ class RedisualBlock(nn.Module):
         self.skip_block = (
             nn.Identity()
             if is_identity
-            else SingleBlock(
+            else BasicBlock(
                 input_dim,
                 output_dim * self.expansion,
                 kernel_size=skip_kernel_size,
@@ -72,6 +73,7 @@ class RedisualBlock(nn.Module):
 
 
 class BottleNeck(RedisualBlock):
+
     expansion = 4
 
     def __init__(
@@ -93,7 +95,7 @@ class BottleNeck(RedisualBlock):
         middle_dim = middle_dim or output_dim
 
         if not is_MHSA:
-            conv = SingleBlock(
+            conv = BasicBlock(
                 middle_dim,
                 middle_dim,
                 stride=stride,
@@ -107,7 +109,7 @@ class BottleNeck(RedisualBlock):
                 module_list.append(nn.AvgPool2d(kernel_size=2, stride=2))
             conv = nn.Sequential(*module_list)
         self.conv_block = nn.Sequential(
-            SingleBlock(
+            BasicBlock(
                 input_dim,
                 middle_dim,
                 kernel_size=1,
@@ -117,7 +119,7 @@ class BottleNeck(RedisualBlock):
                 init_type=init_type,
             ),
             conv,
-            SingleBlock(
+            BasicBlock(
                 middle_dim,
                 output_dim * self.expansion,
                 kernel_size=1,
@@ -133,7 +135,7 @@ class BottleNeck(RedisualBlock):
 class _InputBlock(nn.Sequential):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__(
-            SingleBlock(
+            BasicBlock(
                 input_dim,
                 output_dim,
                 kernel_size=7,
@@ -239,7 +241,7 @@ class _ResNet(nn.Sequential):
 
 
 def _load_single_block_weight(
-    weights: OrderedDict, conv_idx: str, bn_idx: str, single_block: SingleBlock
+    weights: OrderedDict, conv_idx: str, bn_idx: str, single_block: BasicBlock
 ):
     single_block_children = list(list(single_block.children())[0].children())
     conv = single_block_children[0]

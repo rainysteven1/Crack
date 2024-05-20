@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.common_types import _size_2_t
 
-from .init import InitModule
+from ...utils.init import InitModule
 
 
 class _Conv2dSame(nn.Conv2d):
