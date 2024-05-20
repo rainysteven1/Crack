@@ -25,7 +25,7 @@ class _Conv2dSame(nn.Conv2d):
             out_channels,
             kernel_size,
             stride,
-            0 if type(padding) == str else padding,
+            0 if isinstance(padding, str) else padding,
             dilation,
             bias=bias,
         )
