@@ -1,0 +1,28 @@
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: libs.utils.losses.DiceLoss
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.0035
+  eps: 1.0e-7
+  amsgrad: true
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.LambdaLR
+  _partial_: true
+  lr_lambda:
+    _target_: libs.utils.scheduler.lr_lambda1
+    _partial_: true
+
+net:
+  _target_: libs.models.unet.attention_unet.AttentionUNet
+  input_dim: 3
+  output_dim: 1
+  filters: [64, 128, 256, 512, 1024]
+  is_upsample: true
+
+# compile model for faster training with pytorch 2.0
+compile: false

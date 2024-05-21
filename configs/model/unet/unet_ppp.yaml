@@ -1,0 +1,29 @@
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: libs.utils.losses.HybridLoss
+
+optimizer:
+  _target_: torch.optim.SGD
+  _partial_: true
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 0.0001
+  nesterov: false
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  _partial_: true
+  T_max: 100
+  eta_min: 0.00001
+
+net:
+  _target_: libs.models.unet.unet_pp.UNet2Plus
+  input_dim: 3
+  output_dim: 1
+  filters: [64, 128, 256, 512, 1024]
+  is_ds: true
+  init_type: "kaiming"
+
+# compile model for faster training with pytorch 2.0
+compile: false

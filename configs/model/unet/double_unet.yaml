@@ -1,7 +1,7 @@
 _target_: src.models.module.BaseModule
 
 criterion:
-  _target_: src.models.components.modules.losses.BCEDiceLoss
+  _target_: libs.utils.losses.BCEDiceLoss
 
 optimizer:
   _target_: torch.optim.Adam
@@ -15,7 +15,7 @@ scheduler:
   patience: 5
 
 net:
-  _target_: src.models.components.unet.double_unet.DoubleUNet
+  _target_: libs.models.unet.double_unet.DoubleUNet
   input_dim: 3
   output_dim: 1
 

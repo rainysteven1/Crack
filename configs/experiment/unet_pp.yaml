@@ -5,23 +5,26 @@
 
 defaults:
   - override /data: crack
-  - override /model: unet/double_unet
+  - override /model: unet/unet_pp
   - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "double_unet"]
+tags: ["crack", "unet_pp"]
 
 seed: 42
 
 trainer:
   min_epochs: 100
-  max_epochs: 500
+  max_epochs: 100
 
 model:
   compile: false
+
+callbacks:
+  early_stopping: null
 
 logger:
   wandb:
