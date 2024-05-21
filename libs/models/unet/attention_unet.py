@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 
@@ -55,42 +57,30 @@ class AttentionUNet(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        filters: list = [64, 128, 256, 512, 1024],
-        is_upsample: bool = True,
-        init_type=None,
+        filters: list,
+        is_upsample: bool,
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
+        length = len(filters)
 
-        # Encoder
-        self.e = Encoder(input_dim, filters, init_type)
-
-        # Decoder
-        self.d1 = _DecoderBlock(
-            filters[4], filters[3], is_upsample=is_upsample, init_type=init_type
+        self.encoder_blocks = Encoder(input_dim, filters, init_type)
+        self.decoder_blocks = nn.ModuleList(
+            [
+                _DecoderBlock(
+                    filters[i],
+                    filters[i - 1],
+                    is_upsample=is_upsample,
+                    init_type=init_type,
+                )
+                for i in range(length - 1, 0, -1)
+            ]
         )
-        self.d2 = _DecoderBlock(
-            filters[3], filters[2], is_upsample=is_upsample, init_type=init_type
-        )
-        self.d3 = _DecoderBlock(
-            filters[2], filters[1], is_upsample=is_upsample, init_type=init_type
-        )
-        self.d4 = _DecoderBlock(
-            filters[1], filters[0], is_upsample=is_upsample, init_type=init_type
-        )
+        self.output_block = OutputBlock(filters[0], output_dim, init_type=init_type)
 
-        # Output
-        self.output_layer = OutputBlock(filters[0], output_dim, init_type=init_type)
-
-    def forward(self, input):
-        # Encoder
-        x1, x2, x3, x4, x5 = self.e(input)
-
-        # Decoder
-        x6 = self.d1(x5, x4)
-        x7 = self.d2(x6, x3)
-        x8 = self.d3(x7, x2)
-        x9 = self.d4(x8, x1)
-
-        # Output
-        output = self.output_layer(x9)
-        return output
+    def forward(self, input: torch.Tensor):
+        x_list = self.encoder_blocks(input)
+        x = x_list.pop()
+        for decoder_block in self.decoder_blocks:
+            x = decoder_block(x, x_list.pop())
+        return self.output_block(x)

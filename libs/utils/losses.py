@@ -7,7 +7,6 @@ from pytorch_msssim import MS_SSIM
 class DiceLoss(nn.Module):
     def __init__(self, smooth: float = 1e-5):
         super().__init__()
-
         self.smooth = smooth
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
@@ -30,11 +29,11 @@ class BCEDiceLoss(DiceLoss):
 
 
 class IoULoss(nn.Module):
-    def __init__(self, smooth=1):
+    def __init__(self, smooth: float = 1e-5):
         super().__init__()
         self.smooth = smooth
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         intersection = (y_pred * y_true).sum()
         total = (y_pred + y_true).sum()
         union = total - intersection
@@ -43,29 +42,29 @@ class IoULoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.5, gamma=2):
+    def __init__(self, alpha: float = 0.5, gamma: float = 2):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         bce_loss = F.binary_cross_entropy(y_pred, y_true, reduction="mean")
         bce_exp = torch.exp(-bce_loss)
-        focal_loss = self.alpha * (1.0 - bce_exp) ** self.gamma * bce_loss
-        return focal_loss
+        return self.alpha * (1.0 - bce_exp) ** self.gamma * bce_loss
 
 
-class HybridLoss1(nn.Module):
+class HybridLoss(nn.Module):
     """Focal + IoU + MS_SSIM."""
 
-    def __init__(self, alpha=0.5, gamma=2, smooth=1) -> None:
+    def __init__(
+        self, alpha: float = 0.5, gamma: float = 2, smooth: float = 1e-5
+    ) -> None:
         super().__init__()
-
         self.Focal = FocalLoss(alpha, gamma)
         self.IoU = IoULoss(smooth)
         self.MS_SSIM = MS_SSIM(channel=1)
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return (
             self.Focal(y_pred, y_true)
             + self.IoU(y_pred, y_true)
@@ -78,7 +77,7 @@ class StructureLoss(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         eit = 1 + 5 * torch.abs(
             F.avg_pool2d(y_true, kernel_size=31, stride=1, padding=15) - y_true
         )

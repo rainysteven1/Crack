@@ -1,8 +1,11 @@
+from typing import Optional
+
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import LambdaLR
 
-from ..modules.base import BasicBlock, Conv2dSame, InitModule, OutputBlock
+from ..modules.base import BasicBlock, InitModule, OutputBlock
 from .common import Encoder
 
 
@@ -103,11 +106,7 @@ class UNet3Plus(_BasicModule):
     """UNet3+"""
 
     def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        filters: list = [32, 64, 128, 256, 512],
-        init_type: str | None = "kaiming",
+        self, input_dim: int, output_dim: int, filters: list, init_type: Optional[str]
     ) -> None:
         super().__init__(input_dim, filters, init_type)
 
@@ -128,11 +127,7 @@ class UNet3PlusDeepSup(_BasicModule):
     """UNet3+ with deep supervision."""
 
     def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        filters: list = [32, 64, 128, 256, 512],
-        init_type: str | None = "kaiming",
+        self, input_dim: int, output_dim: int, filters: list, init_type: Optional[str]
     ) -> None:
         super().__init__(input_dim, filters, init_type)
 
@@ -142,15 +137,22 @@ class UNet3PlusDeepSup(_BasicModule):
         for i in range(len(self.up_scale_factors)):
             self.output_layers.append(
                 nn.Sequential(
-                    Conv2dSame(
-                        self.filters[i + 1], output_dim, kernel_size=3, padding="same"
+                    BasicBlock(
+                        self.filters[i + 1],
+                        output_dim,
+                        is_bn=False,
+                        is_relu=False,
+                        init_type=init_type,
                     ),
                     nn.Upsample(scale_factor=self.up_scale_factors[i], mode="bilinear"),
                     nn.Sigmoid(),
                 )
             )
         self.output_layers.insert(
-            0, Conv2dSame(self.up_dim, output_dim, kernel_size=3, padding="same")
+            0,
+            BasicBlock(
+                self.up_dim, output_dim, is_bn=False, is_relu=False, init_type=init_type
+            ),
         )
 
         self._initialize_weights()
@@ -171,11 +173,7 @@ class UNet3PlusDeepSupCGM(_BasicModule):
     """UNet3+ with deep supervision and class-guided module."""
 
     def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        filters: list = [32, 64, 128, 256, 512],
-        init_type: str | None = "kaiming",
+        self, input_dim: int, output_dim: int, filters: list, init_type: Optional[str]
     ) -> None:
         super().__init__(input_dim, filters, init_type)
 
@@ -186,8 +184,12 @@ class UNet3PlusDeepSupCGM(_BasicModule):
         for i in range(len(self.up_scale_factors)):
             self.output_layers.append(
                 nn.Sequential(
-                    Conv2dSame(
-                        self.filters[i], output_dim, kernel_size=3, padding="same"
+                    BasicBlock(
+                        self.filters[i],
+                        output_dim,
+                        is_bn=False,
+                        is_relu=False,
+                        init_type=init_type,
                     ),
                     nn.Upsample(scale_factor=self.up_scale_factors[i], mode="bilinear"),
                 )
@@ -195,7 +197,15 @@ class UNet3PlusDeepSupCGM(_BasicModule):
 
         self.cls = nn.Sequential(
             nn.Dropout(p=0.5),
-            Conv2dSame(self.filters[4], 2, kernel_size=1),
+            BasicBlock(
+                self.filters[-1],
+                2,
+                kernel_size=1,
+                padding=0,
+                is_bn=False,
+                is_relu=False,
+                init_type=init_type,
+            ),
             nn.AdaptiveAvgPool2d(1),
             nn.Sigmoid(),
         )

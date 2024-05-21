@@ -56,86 +56,49 @@ class _DecoderBlock(InitModule):
 class UNet2Plus(nn.Module):
     """UNet++"""
 
-    layer_configurations = [64, 128, 256, 512, 1024]
-
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
-        is_ds: bool = True,
-        init_type: Optional[str] = "kaiming",
+        filters: list,
+        is_ds: bool,
+        init_type: Optional[str],
     ) -> None:
         super().__init__()
         self.is_ds = is_ds
 
         # Encoder
-        self.e = Encoder(input_dim, self.layer_configurations, init_type)
+        self.e = Encoder(input_dim, filters, init_type)
 
         # Decoder
-        self.d01 = _DecoderBlock(
-            self.layer_configurations[1],
-            self.layer_configurations[0],
-            init_type=init_type,
-        )
-        self.d11 = _DecoderBlock(
-            self.layer_configurations[2],
-            self.layer_configurations[1],
-            init_type=init_type,
-        )
-        self.d21 = _DecoderBlock(
-            self.layer_configurations[3],
-            self.layer_configurations[2],
-            init_type=init_type,
-        )
-        self.d31 = _DecoderBlock(
-            self.layer_configurations[4],
-            self.layer_configurations[3],
-            init_type=init_type,
-        )
+        self.d01 = _DecoderBlock(filters[1], filters[0], init_type=init_type)
+        self.d11 = _DecoderBlock(filters[2], filters[1], init_type=init_type)
+        self.d21 = _DecoderBlock(filters[3], filters[2], init_type=init_type)
+        self.d31 = _DecoderBlock(filters[4], filters[3], init_type=init_type)
 
         self.d02 = _DecoderBlock(
-            self.layer_configurations[1],
-            self.layer_configurations[0],
-            N_concat=3,
-            init_type=init_type,
+            filters[1], filters[0], N_concat=3, init_type=init_type
         )
         self.d12 = _DecoderBlock(
-            self.layer_configurations[2],
-            self.layer_configurations[1],
-            N_concat=3,
-            init_type=init_type,
+            filters[2], filters[1], N_concat=3, init_type=init_type
         )
         self.d22 = _DecoderBlock(
-            self.layer_configurations[3],
-            self.layer_configurations[2],
-            N_concat=3,
-            init_type=init_type,
+            filters[3], filters[2], N_concat=3, init_type=init_type
         )
 
         self.d03 = _DecoderBlock(
-            self.layer_configurations[1],
-            self.layer_configurations[0],
-            N_concat=4,
-            init_type=init_type,
+            filters[1], filters[0], N_concat=4, init_type=init_type
         )
         self.d13 = _DecoderBlock(
-            self.layer_configurations[2],
-            self.layer_configurations[1],
-            N_concat=4,
-            init_type=init_type,
+            filters[2], filters[1], N_concat=4, init_type=init_type
         )
 
         self.d04 = _DecoderBlock(
-            self.layer_configurations[1],
-            self.layer_configurations[0],
-            N_concat=5,
-            init_type=init_type,
+            filters[1], filters[0], N_concat=5, init_type=init_type
         )
 
         def final_block():
-            return OutputBlock(
-                self.layer_configurations[0], output_dim, init_type=init_type
-            )
+            return OutputBlock(filters[0], output_dim, init_type=init_type)
 
         # Output
         if self.is_ds:
