@@ -8,14 +8,14 @@ optimizer:
   _partial_: true
   lr: 0.001
   momentum: 0.9
-  weight_decay: 0.0001
+  weight_decay: 1.0e-4
   nesterov: false
 
 scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   _partial_: true
   T_max: 100
-  eta_min: 0.00001
+  eta_min: 1.0e-5
 
 net:
   _target_: libs.models.unet.unet_pp.UNet2Plus
