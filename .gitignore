@@ -148,6 +148,8 @@ dmypy.json
 configs/local/default.yaml
 /data/
 /logs/
+/resources/*
+!/resources/image
 .env
 *.ipynb
 
