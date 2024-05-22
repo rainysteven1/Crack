@@ -1,0 +1,8 @@
+defaults:
+  - /model/net/transformer/vit/b16@_here_
+
+config:
+  resnet:
+    type: resnet50
+    pretrained_path: ${paths.resources_dir}/checkpoints/resnet50-19c8e357.pth
+    dims: [1024, 512, 256]

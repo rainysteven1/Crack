@@ -1,0 +1,17 @@
+config:
+  patch_size: 16
+  patches:
+    size: [16, 16]
+  hidden_size: 768
+
+  transformer:
+    pretrained_path: ${paths.resources_dir}/checkpoints/ViT-B_16.npz
+    mlp_dim: 3072
+    n_heads: 12
+    n_layers: 12
+    attn_dropout_rate: 0.0
+    dropout_rate: 0.1
+
+  decoder_channels: [256, 128, 64, 16]
+  n_classes: 1
+  n_skip: 0

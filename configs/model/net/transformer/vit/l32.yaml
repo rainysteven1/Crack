@@ -1,0 +1,13 @@
+defaults:
+  - /model/net/transformer/vit/l16@_here_
+
+config:
+  patch_size: 32
+  patches:
+    size: [32, 32]
+
+  transformer:
+    pretrained_path: ${paths.resources_dir}/checkpoints/ViT-L_32.npz
+    mlp_dim: 4096
+    n_heads: 16
+    n_layers: 24

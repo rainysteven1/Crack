@@ -1,0 +1,26 @@
+defaults:
+  - net: null
+
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: libs.utils.losses.StructureLoss
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 7.0e-5
+  betas: [0.5, 0.999]
+
+scheduler: null
+
+net:
+  _target_: libs.models.unet.transformer.transfuse.TransFuse
+  input_dim: 3
+  output_dim: 1
+  drop_rate: 0.2
+  img_size: ${data.img_size}
+  init_type: "kaiming"
+
+# compile model for faster training with pytorch 2.0
+compile: false

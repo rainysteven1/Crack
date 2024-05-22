@@ -1,0 +1,31 @@
+defaults:
+  - net: null
+
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: libs.utils.losses.DiceLoss
+
+optimizer:
+  _target_: torch.optim.SGD
+  _partial_: true
+  lr: 0.01
+  momentum: 0.9
+  weight_decay: 1.0e-4
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.LambdaLR
+  _partial_: true
+  lr_lambda:
+    _target_: libs.utils.scheduler.lr_lambda3
+    _partial_: true
+    epochs: ${trainer.max_epochs}
+
+net:
+  _target_: libs.models.unet.transformer.transunet.TransUNet
+  input_dim: 3
+  output_dim: 1
+  img_size: ${data.img_size}
+
+# compile model for faster training with pytorch 2.0
+compile: false

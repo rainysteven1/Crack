@@ -1,0 +1,9 @@
+defaults:
+  - /model/net/transformer/vit/b16@_here_
+
+config:
+  patches:
+    size: [32, 32]
+
+  transformer:
+    pretrained_path: ${paths.resources_dir}/checkpoints/ViT-B_32.npz
