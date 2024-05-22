@@ -4,11 +4,10 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from ml_collections import ConfigDict
+from omegaconf import DictConfig
 
-from ...modules.base import BasicBlock, Conv2dSame
+from ...modules.base import BasicBlock
 from ...transformer.vit import VisionTransformer
-from ...transformer.vit_config import CONFIGS
 
 
 class _DecoderBlock(nn.Module):
@@ -30,7 +29,7 @@ class _DecoderBlock(nn.Module):
 
 
 class _Decoder(nn.Module):
-    def __init__(self, config: ConfigDict) -> None:
+    def __init__(self, config: DictConfig) -> None:
         super().__init__()
         filters = config.get("decoder_channels")
         head_channel = 512
@@ -71,21 +70,9 @@ class _Decoder(nn.Module):
 
 
 class _SegmentationHead(nn.Sequential):
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        kernel_size: int = 3,
-        is_upsample: bool = True,
-    ):
-        conv = Conv2dSame(
-            input_dim, output_dim, kernel_size=kernel_size, padding=kernel_size // 2
-        )
-        upsample = (
-            nn.Upsample(scale_factor=1, mode="bilinear")
-            if is_upsample
-            else nn.Identity()
-        )
+    def __init__(self, input_dim: int, output_dim: int):
+        conv = BasicBlock(input_dim, output_dim, is_bn=False, is_relu=False)
+        upsample = nn.Upsample(scale_factor=1, mode="bilinear")
 
         super().__init__(conv, upsample)
 
@@ -95,25 +82,19 @@ class TransUNet(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        img_size: int = 256,
-        train_config: Optional[str] = "ViT-B_16",
-        test_config: Optional[str] = None,
+        img_size: int,
+        config: DictConfig,
     ):
         super().__init__()
-        self.config = (
-            CONFIGS.get(train_config)()
-            if not test_config
-            else CONFIGS.get(test_config)(train_config)
-        )
+        self.config = config
 
-        self.encoder = VisionTransformer(input_dim, img_size, self.config)
-        self.decoder = _Decoder(self.config)
+        self.encoder = VisionTransformer(input_dim, img_size, config)
+        self.decoder = _Decoder(config)
         self.segmentation_head = _SegmentationHead(
-            self.config["decoder_channels"][-1], output_dim
+            config["decoder_channels"][-1], output_dim
         )
 
-        if not test_config:
-            self._load_from()
+        self._load_from()
 
     def forward(self, input):
         x = self.encoder(input)
@@ -125,8 +106,7 @@ class TransUNet(nn.Module):
         x = x.squeeze()
         x = self.decoder(x, features)
         x = self.segmentation_head(x)
-        output = torch.sigmoid(x)
-        return output
+        return torch.sigmoid(x)
 
     def _load_from(self):
         weights = np.load(self.config.transformer.pretrained_path)

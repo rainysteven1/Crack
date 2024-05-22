@@ -5,12 +5,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from omegaconf import DictConfig
 
 from ...modules.attention import AttentionBlock
 from ...modules.base import BasicBlock
 from ...modules.resnet import BottleNeck, resnet34, resnet50
 from ...transformer.vit import VisionTransformer
-from .transfuse_config import CONFIGS
 
 
 class _ChannelPool(nn.Module):
@@ -29,8 +29,8 @@ class _BiFusionBlock(nn.Module):
         r_dim: int,
         input_dim: int,
         output_dim: int,
-        drop_rate: float = 0.0,
-        init_type: Optional[str] = None,
+        drop_rate: float,
+        init_type: Optional[str],
     ):
         super().__init__()
         self.drop_rate = drop_rate
@@ -97,7 +97,7 @@ class _BiFusionBlock(nn.Module):
             ch_dim1 + ch_dim2 + input_dim,
             output_dim // 4,
             output_dim // 2,
-            padding=0,
+            skip_padding=0,
             is_identity=is_identity,
             reversed=True,
             init_type=init_type,
@@ -129,8 +129,8 @@ class _UpsampleBlock(nn.Module):
         input_dim1: int,
         input_dim2: int,
         output_dim: int,
+        init_type: Optional[str],
         is_attn: bool = False,
-        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.is_attn = is_attn
@@ -176,73 +176,38 @@ class TransFuse(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        drop_rate: int = 0.2,
-        img_size: int = 256,
-        train_config: Optional[str] = "ViT-B_16",
-        test_config: Optional[str] = None,
-        init_type: Optional[str] = "kaiming",
+        drop_rate: int,
+        img_size: int,
+        config: DictConfig,
+        init_type: Optional[str],
     ) -> None:
         super().__init__()
-        self.config = (
-            CONFIGS.get(train_config)()
-            if not test_config
-            else CONFIGS.get(test_config)(train_config)
-        )
-        dims = self.config.resnet.dims
+        self.config = config
+        dims = config.resnet.dims
 
-        self.transformer = VisionTransformer(input_dim, img_size, self.config)
+        self.transformer = VisionTransformer(input_dim, img_size, config)
         self.resnet = (
             resnet34(input_dim, pretrained=True)
-            if train_config == "ViT-S_16"
+            if config.resnet.type == "resnet34"
             else resnet50(input_dim, pretrained=True)
         )
         self.layers = list(self.resnet.children())
 
-        hidden_size = self.config["hidden_size"]
+        hidden_size = config["hidden_size"]
         self.up_block1 = _UpsampleBlock(hidden_size, 0, dims[1])
         self.up_block2 = _UpsampleBlock(dims[1], 0, dims[2])
 
         self.bifusion = _BiFusionBlock(
-            dims[0],
-            hidden_size,
-            4,
-            dims[0],
-            dims[0],
-            drop_rate=drop_rate / 2,
-            init_type=init_type,
+            dims[0], hidden_size, 4, dims[0], dims[0], drop_rate / 2, init_type
         )
         self.bifusion1 = _BiFusionBlock(
-            dims[1],
-            dims[1],
-            2,
-            dims[1],
-            dims[1],
-            drop_rate=drop_rate / 2,
-            init_type=init_type,
+            dims[1], dims[1], 2, dims[1], dims[1], drop_rate / 2, init_type
         )
-        self.bifusion1_up = _UpsampleBlock(
-            dims[0],
-            dims[1],
-            dims[1],
-            is_attn=True,
-            init_type=init_type,
-        )
+        self.bifusion1_up = _UpsampleBlock(dims[0], dims[1], dims[1], True, init_type)
         self.bifusion2 = _BiFusionBlock(
-            dims[2],
-            dims[2],
-            1,
-            dims[2],
-            dims[2],
-            drop_rate=drop_rate / 2,
-            init_type=init_type,
+            dims[2], dims[2], 1, dims[2], dims[2], drop_rate / 2, init_type
         )
-        self.bifusion2_up = _UpsampleBlock(
-            dims[1],
-            dims[2],
-            dims[2],
-            is_attn=True,
-            init_type=init_type,
-        )
+        self.bifusion2_up = _UpsampleBlock(dims[1], dims[2], dims[2], True, init_type)
 
         def final_common(radio: int):
             return nn.Sequential(
@@ -267,8 +232,7 @@ class TransFuse(nn.Module):
 
         self.drop = nn.Dropout2d(drop_rate)
 
-        if not test_config:
-            self._load_from()
+        self._load_from()
 
     def forward(self, input: torch.Tensor):
         # transformer

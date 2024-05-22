@@ -4,13 +4,13 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from ml_collections import ConfigDict
+from omegaconf import DictConfig
 from scipy import ndimage
 from torch.nn.modules.utils import _pair
 
 from ...utils.utils import np2th
 from ..modules.attention import MHSA
-from ..modules.base import Conv2dSame
+from ..modules.base import BasicBlock
 from .vit_resnet import ResNetV2
 
 ATTENTION_Q = "MultiHeadDotProductAttention_1/query"
@@ -26,19 +26,14 @@ MLP_NORM = "LayerNorm_2"
 class _Embeddings(nn.Module):
     """Construct the embeddings from patch, position embeddings."""
 
-    def __init__(
-        self,
-        input_dim: int,
-        image_size: int,
-        config: ConfigDict,
-    ):
+    def __init__(self, input_dim: int, image_size: int, config: DictConfig):
         super().__init__()
         image_size = _pair(image_size)
         patch_size = config.get("patch_size")
         embeddings_dim = config.get("hidden_size")
         n_patches = (image_size[0] // patch_size) * (image_size[1] // patch_size)
 
-        if config.patches.get("grid") is not None:  # ResNet
+        if config.patches.get("grid"):  # ResNet
             grid_size = config.patches["grid"]
             patch_size = (
                 image_size[0] // 16 // grid_size[0],
@@ -61,9 +56,13 @@ class _Embeddings(nn.Module):
             )
             self.hybrid = False
 
-        self.classifier = config.get("classifier")
-        self.patch_embeddings = Conv2dSame(
-            input_dim, embeddings_dim, kernel_size=patch_size, stride=patch_size
+        self.patch_embeddings = BasicBlock(
+            input_dim,
+            embeddings_dim,
+            kernel_size=patch_size,
+            stride=patch_size,
+            is_bn=False,
+            is_relu=False,
         )
         self.position_embeddings = nn.Parameter(
             torch.zeros(1, n_patches, embeddings_dim)
@@ -83,10 +82,9 @@ class _Embeddings(nn.Module):
         return (output, *features) if features else output
 
     def load_from(self, weights):
-        self.patch_embeddings.weight.copy_(
-            np2th(weights["embedding/kernel"], conv=True)
-        )
-        self.patch_embeddings.bias.copy_(np2th(weights["embedding/bias"]))
+        conv = list(list(self.patch_embeddings.children())[0].children())[0]
+        conv.weight.copy_(np2th(weights["embedding/kernel"], conv=True))
+        conv.bias.copy_(np2th(weights["embedding/bias"]))
 
         posemb = np2th(weights["Transformer/posembed_input/pos_embedding"])
 
@@ -98,8 +96,7 @@ class _Embeddings(nn.Module):
             self.position_embeddings.copy_(posemb)
         else:
             ntok_new = posemb_new.size(1)
-            if self.classifier == "seg":
-                _, posemb_grid = posemb[:, :1], posemb[0, 1:]
+            _, posemb_grid = posemb[:, :1], posemb[0, 1:]
             gs_old = int(np.sqrt(len(posemb_grid)))
             gs_new = int(np.sqrt(ntok_new))
             posemb_grid = posemb_grid.reshape(gs_old, gs_old, -1)
@@ -125,7 +122,7 @@ class _Embeddings(nn.Module):
 
 
 class _Attention(nn.Module):
-    def __init__(self, input_dim: int, config: ConfigDict):
+    def __init__(self, input_dim: int, config: DictConfig):
         super().__init__()
         self.MHSA = MHSA(input_dim, config["transformer"]["n_heads"])
 
@@ -175,7 +172,7 @@ class _MLP(nn.Module):
 
 
 class _TransLayer(nn.Module):
-    def __init__(self, input_dim: int, config: ConfigDict) -> None:
+    def __init__(self, input_dim: int, config: DictConfig) -> None:
         super().__init__()
 
         self.hidden_size = input_dim
@@ -269,7 +266,7 @@ class _TransEncoder(nn.Module):
     """Transformer Encoder."""
 
     def __init__(
-        self, config: ConfigDict, return_intermediate: bool, return_n_layers: int
+        self, config: DictConfig, return_intermediate: bool, return_n_layers: int
     ):
         super().__init__()
         embedding_dim = config.get("hidden_size")
@@ -311,7 +308,7 @@ class VisionTransformer(nn.Module):
         self,
         input_dim: int,
         img_size: int,
-        config: ConfigDict,
+        config: DictConfig,
         return_intermediate: bool = False,
         return_n_layers: int = 0,
     ):
