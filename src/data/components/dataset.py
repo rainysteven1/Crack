@@ -24,6 +24,6 @@ class CrackDataset(Dataset):
         batch_y = augs["mask"]
 
         batch_x = (np.transpose(batch_x, (2, 0, 1)) / 255.0).astype(np.float32)
-        batch_y = (np.expand_dims(batch_y, axis=0) / 255.0).astype(np.float32)
+        batch_y = (np.expand_dims(batch_y, axis=0) / 255.0).astype(np.int32)
 
         return batch_x, batch_y

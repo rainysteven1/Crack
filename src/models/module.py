@@ -5,6 +5,8 @@ import torchmetrics.classification as C
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric, MetricCollection
 
+from libs.utils.losses import StructureLoss
+
 
 class BaseModule(LightningModule):
     """A `LightningModule` implements 8 key methods:
@@ -61,6 +63,10 @@ class BaseModule(LightningModule):
 
         # loss function
         self.criterion = criterion
+        self.is_structure_loss = isinstance(criterion, StructureLoss)
+
+        # judge fit or test
+        self.is_fit = True
 
         # metric objects for calculating and averaging accuracy across batches
         self.train_acc = C.BinaryAccuracy()
@@ -120,15 +126,23 @@ class BaseModule(LightningModule):
         """
         x, y = batch
         outputs = self.forward(x)
-        if not isinstance(outputs, list):
-            pred = outputs
-            loss = self.criterion(pred, y)
-        else:
+        if self.is_structure_loss:
             pred = outputs[-1]
-            loss = 0
-            for output in outputs:
-                loss += self.criterion(output, y)
-            loss /= len(outputs)
+            if self.is_fit:
+                losses = [self.criterion(output, y) for output in outputs]
+                loss = 0.5 * losses[2] + 0.3 * losses[1] + 0.2 * losses[0]
+            else:
+                loss = self.criterion(pred, y)
+        else:
+            if not isinstance(outputs, list):
+                pred = outputs
+                loss = self.criterion(pred, y)
+            else:
+                pred = outputs[-1]
+                loss = 0
+                for output in outputs:
+                    loss += self.criterion(output, y)
+                loss /= len(outputs)
         return loss, pred, y
 
     def training_step(
@@ -194,6 +208,9 @@ class BaseModule(LightningModule):
         self.log(
             "val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True
         )
+
+    def on_fit_end(self) -> None:
+        self.is_fit = False
 
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
