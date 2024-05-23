@@ -144,12 +144,18 @@ dmypy.json
 *.tar
 *.tar.gz
 
+.DS_Store
+
 # Lightning-Hydra-Template
 configs/local/default.yaml
 /data/
 /logs/
 /resources/*
 !/resources/image
+
+/scripts/*
+!/scripts/docker.sh
+!/scripts/schedule.sh
 .env
 *.ipynb
 

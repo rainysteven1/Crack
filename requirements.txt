@@ -16,9 +16,9 @@ pandas==2.2.2
 matplotlib==3.9.0
 
 # --------- model --------- #
+cython==0.29.36
 pytorch_msssim==1.0.0
 ml_collections==0.1.1
-pydensecrf==1.0
 
 # --------- loggers --------- #
 # wandb
