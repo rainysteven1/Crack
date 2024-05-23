@@ -11,12 +11,19 @@ class CrackDataModule(BaseDataModule):
         self,
         data_dir: str,
         img_size: int,
-        batch_size: int,
+        train_batch_size: int,
+        test_batch_size: int,
         num_workers: int,
         pin_memory: bool,
         persistent_workers: bool,
     ):
-        super().__init__(batch_size, num_workers, pin_memory, persistent_workers)
+        super().__init__(
+            train_batch_size,
+            test_batch_size,
+            num_workers,
+            pin_memory,
+            persistent_workers,
+        )
 
         self.save_hyperparameters(logger=False)
         # data transformations

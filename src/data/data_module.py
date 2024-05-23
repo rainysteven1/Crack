@@ -45,7 +45,8 @@ class BaseDataModule(LightningDataModule):
 
     def __init__(
         self,
-        batch_size: int,
+        train_batch_size: int,
+        test_batch_size: int,
         num_workers: int,
         pin_memory: bool,
         persistent_workers: bool,
@@ -68,8 +69,6 @@ class BaseDataModule(LightningDataModule):
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
 
-        self.batch_size_per_device = batch_size
-
     def setup(self, stage: Optional[str] = None) -> None:
         """Load data. Set variables: `self.data_train`, `self.data_val`,
         `self.data_test`.
@@ -90,7 +89,7 @@ class BaseDataModule(LightningDataModule):
         """
         return DataLoader(
             dataset=self.data_train,
-            batch_size=self.batch_size_per_device,
+            batch_size=self.hparams.train_batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
             persistent_workers=self.hparams.persistent_workers,
@@ -104,7 +103,7 @@ class BaseDataModule(LightningDataModule):
         """
         return DataLoader(
             dataset=self.data_val,
-            batch_size=self.batch_size_per_device,
+            batch_size=self.hparams.train_batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
             persistent_workers=self.hparams.persistent_workers,
@@ -118,7 +117,7 @@ class BaseDataModule(LightningDataModule):
         """
         return DataLoader(
             dataset=self.data_test,
-            batch_size=self.batch_size_per_device,
+            batch_size=self.hparams.test_batch_size,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
             persistent_workers=self.hparams.persistent_workers,

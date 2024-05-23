@@ -1,7 +1,8 @@
 _target_: src.data.crack_datamodule.CrackDataModule
 data_dir: ${paths.data_dir}/crack500
 img_size: 256
-batch_size: 8 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+train_batch_size: 8 # Needs to be divisible by the number of devices (e.g., if in a distributed setup)
+val_batch_size: 20
 num_workers: 0
 pin_memory: true
 persistent_workers: false
