@@ -11,6 +11,7 @@ from .base import BasicBlock
 PRETRAINED_MODELS = {
     "resnet34": "resources/checkpoints/resnet34-333f7ec4.pth",
     "resnet50": "resources/checkpoints/resnet50-19c8e357.pth",
+    "resnet101": "resources/checkpoints/resnet101-5d3b4d8f.pth",
 }
 
 
@@ -239,6 +240,16 @@ class _ResNet(nn.Sequential):
                             weights, conv_idx, bn_idx, single_block
                         )
 
+    def get_params(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                yield m.weight
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, nn.BatchNorm2d):
+                m.eval()
+
 
 def _load_single_block_weight(
     weights: OrderedDict, conv_idx: str, bn_idx: str, single_block: BasicBlock
@@ -266,16 +277,12 @@ def _resnet(
     return model
 
 
-def resnet34(input_dim: int, pretrained: bool = True):
+def resnet34(input_dim: int, pretrained: bool):
     return _resnet(input_dim, [3, 4, 6, 3], RedisualBlock, "resnet34", pretrained)
 
 
 def resnet50(
-    input_dim: int,
-    pretrained: bool = True,
-    img_size: int = 256,
-    is_MHSA: bool = False,
-    n_heads: int = 4,
+    input_dim: int, img_size: int, is_MHSA: bool, n_heads: int, pretrained: bool
 ):
     return _resnet(
         input_dim,
@@ -287,3 +294,7 @@ def resnet50(
         is_MHSA,
         n_heads,
     )
+
+
+def resnet101(input_dim: int, pretrained: bool):
+    return _resnet(input_dim, [3, 4, 23, 3], BottleNeck, "resnet101", pretrained)

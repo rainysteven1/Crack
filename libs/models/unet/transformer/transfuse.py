@@ -189,13 +189,13 @@ class TransFuse(nn.Module):
         self.resnet = (
             resnet34(input_dim, pretrained=True)
             if config.resnet.type == "resnet34"
-            else resnet50(input_dim, pretrained=True)
+            else resnet50(input_dim, img_size, is_MHSA=True, n_heads=4, pretrained=True)
         )
         self.layers = list(self.resnet.children())
 
         hidden_size = config["hidden_size"]
-        self.up_block1 = _UpsampleBlock(hidden_size, 0, dims[1])
-        self.up_block2 = _UpsampleBlock(dims[1], 0, dims[2])
+        self.up_block1 = _UpsampleBlock(hidden_size, 0, dims[1], init_type)
+        self.up_block2 = _UpsampleBlock(dims[1], 0, dims[2], init_type)
 
         self.bifusion = _BiFusionBlock(
             dims[0], hidden_size, 4, dims[0], dims[0], drop_rate / 2, init_type
@@ -209,7 +209,7 @@ class TransFuse(nn.Module):
         )
         self.bifusion2_up = _UpsampleBlock(dims[1], dims[2], dims[2], True, init_type)
 
-        def final_common(radio: int):
+        def final_common(ratio: int):
             return nn.Sequential(
                 BasicBlock(dims[2], dims[2], init_type=init_type),
                 BasicBlock(
@@ -219,7 +219,7 @@ class TransFuse(nn.Module):
                     is_relu=False,
                     init_type=init_type,
                 ),
-                nn.Upsample(scale_factor=radio, mode="bilinear", align_corners=True),
+                nn.Upsample(scale_factor=ratio, mode="bilinear", align_corners=True),
                 nn.Sigmoid(),
             )
 

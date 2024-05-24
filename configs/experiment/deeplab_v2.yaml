@@ -1,0 +1,34 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: crack
+  - override /model: net/deeplab/deeplab_v2
+  - override /callbacks: default
+  - override /trainer: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["crack", "DeepLab", "DeepLabV2"]
+
+seed: 42
+
+trainer:
+  min_epochs: 100
+  max_epochs: 1000
+
+model:
+  compile: false
+
+callbacks:
+  early_stopping: null
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "crak"
+  aim:
+    experiment: "crack"

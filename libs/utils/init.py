@@ -37,6 +37,19 @@ class _InitWeights_XavierUniform:
                 module.bias = init.constant_(module.bias, 0)
 
 
+class _InitWeights_Constant:
+    def __init__(self, gain=1):
+        self.gain = gain
+
+    def __call__(self, module):
+        if isinstance(module, nn.BatchNorm2d):
+            _init_batchNorm(module)
+        if isinstance(module, nn.Conv2d) or isinstance(module, nn.ConvTranspose2d):
+            module.weight = init.normal_(module.weight, mean=0, std=0.01)
+            if module.bias is not None:
+                module.bias = init.constant_(module.bias, 0)
+
+
 class InitModule(nn.Module):
     def __init__(self, init_type: Optional[str] = None):
         super().__init__()
@@ -49,6 +62,8 @@ class InitModule(nn.Module):
                 self.init = _InitWeights_He()
             elif self.init_type == "xavier":
                 self.init = _InitWeights_XavierUniform()
+            elif self.init_type == "constant":
+                self.init = _InitWeights_Constant()
 
     def _initialize_weights(self):
         pass

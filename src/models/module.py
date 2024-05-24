@@ -263,7 +263,16 @@ class BaseModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
+
+        if getattr(self.trainer.model, "get_params", None):
+            keywords = self.hparams.optimizer.keywords
+            params = self.trainer.model.get_params(keywords)
+            del keywords["lr"]
+            del keywords["weight_decay"]
+        else:
+            params = self.trainer.model.parameters()
+
+        optimizer = self.hparams.optimizer(params=params)
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(optimizer=optimizer)
             return {

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,30 +26,46 @@ class ASPP_v2(nn.Module):
     version: DeepLabv2
     """
 
-    dilations = [1, 6, 12, 18]
-
-    def __init__(self, input_dim: int, output_dim: int, rate_scale: int = 1) -> None:
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        atrous_rates: list[int],
+        init_type: Optional[str],
+    ) -> None:
         super().__init__()
+        self.is_bias = not (init_type is not None and init_type == "kaiming")
 
         self.layers = nn.ModuleList(
             [
                 BasicBlock(
                     input_dim,
                     output_dim,
-                    kernel_size=3,
-                    padding="same",
-                    dilation=dilation * rate_scale,
-                    is_relu=False,
+                    padding=rate,
+                    dilation=rate,
+                    is_bn=not self.is_bias,
+                    is_relu=not self.is_bias,
+                    is_bias=self.is_bias,
+                    init_type=init_type,
                 )
-                for dilation in self.dilations
+                for rate in atrous_rates
             ]
-        )
-        self.output_block = BasicBlock(
-            output_dim, output_dim, kernel_size=1, padding=0, is_bn=False, is_relu=False
         )
 
     def forward(self, input: torch.Tensor):
-        return self.output_block(sum([layer(input) for layer in self.layers]))
+        return sum([layer(input) for layer in self.layers])
+
+    def get_weight(self):
+        for layer in self.layers:
+            for module in layer.modules():
+                if isinstance(module, nn.Conv2d):
+                    yield module.weight
+
+    def get_bias(self):
+        for layer in self.layers:
+            for module in layer.modules():
+                if isinstance(module, nn.Conv2d):
+                    yield module.bias
 
 
 class ASPP_v3(nn.Module):

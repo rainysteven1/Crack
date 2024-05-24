@@ -61,14 +61,14 @@ class _Conv2dSame(nn.Conv2d):
 
 
 class SqueezeExciteBlock(nn.Module):
-    def __init__(self, filters: int, radio: int = 8) -> None:
+    def __init__(self, filters: int, ratio: int = 8) -> None:
         super().__init__()
 
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.layers = nn.Sequential(
-            nn.Linear(filters, filters // radio, bias=False),
+            nn.Linear(filters, filters // ratio, bias=False),
             nn.ReLU(),
-            nn.Linear(filters // radio, filters, bias=False),
+            nn.Linear(filters // ratio, filters, bias=False),
             nn.Sigmoid(),
         )
 
