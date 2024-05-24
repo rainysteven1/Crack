@@ -65,8 +65,6 @@ class CrackDataModule(BaseDataModule):
                 )
             return set_list
 
-        print(self.trainer)
-
         if self.trainer:
             self.data_train = CrackDataset(
                 *path_list("train"), transform=self.train_transforms
