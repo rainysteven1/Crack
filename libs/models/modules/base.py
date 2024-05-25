@@ -127,19 +127,19 @@ class OutputBlock(nn.Sequential):
         output_dim: int,
         kernel_size: int = 1,
         is_bn: bool = False,
+        is_bias: bool = True,
         init_type: Optional[str] = None,
     ) -> None:
         super().__init__(
-            *[
-                BasicBlock(
-                    input_dim,
-                    output_dim,
-                    kernel_size,
-                    padding="same",
-                    is_bn=is_bn,
-                    is_relu=False,
-                    init_type=init_type,
-                ),
-                nn.Sigmoid(),
-            ],
+            BasicBlock(
+                input_dim,
+                output_dim,
+                kernel_size,
+                padding="same",
+                is_bn=is_bn,
+                is_relu=False,
+                is_bias=is_bias,
+                init_type=init_type,
+            ),
+            nn.Sigmoid(),
         )

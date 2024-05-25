@@ -4,12 +4,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..modules.pyramid import ASPP_v2
+from ..modules.base import BasicBlock
+from ..modules.pyramid import ASPP_v3
 from ..modules.resnet import resnet101
 
 
-class DeepLabV2(nn.Module):
-    """DeepLabV2: Dilated ResNet + ASPP"""
+class DeepLabV3(nn.Module):
+    """DeepLab v3: Dilated ResNet with multi-grid + improved ASPP"""
 
     def __init__(
         self,
@@ -18,24 +19,49 @@ class DeepLabV2(nn.Module):
         pretrained: bool,
         strides: Optional[List[int]],
         dilations: Optional[List[int]],
+        multi_grids: Optional[List[int]],
         atrous_rates: List[int],
         init_type: Optional[str],
-    ) -> None:
+    ):
         super().__init__()
+        aspp_output_dim = 256
 
-        self.backbone = resnet101(input_dim, pretrained, strides, dilations)
+        self.backbone = resnet101(
+            input_dim, pretrained, strides, dilations, multi_grids
+        )
         aspp_input_dim = (
             self.backbone.stage_cfg["dims"][-1] * self.backbone.block_type.expansion
         )
-        self.ASPP = ASPP_v2(
-            aspp_input_dim, output_dim, atrous_rates, init_type=init_type
+        self.ASPP = ASPP_v3(
+            aspp_input_dim, aspp_output_dim, atrous_rates, init_type=init_type
+        )
+        concat_dim = aspp_output_dim * (len(atrous_rates) + 2)
+        self.classifier_block = nn.Sequential(
+            BasicBlock(
+                concat_dim,
+                aspp_output_dim,
+                kernel_size=1,
+                padding=0,
+                is_bias=False,
+                init_type=init_type,
+            ),
+            BasicBlock(
+                aspp_output_dim,
+                output_dim,
+                kernel_size=1,
+                padding=0,
+                is_bn=False,
+                is_relu=False,
+                is_bias=False,
+                init_type=init_type,
+            ),
         )
 
     def forward(self, input: torch.Tensor):
-        x = self.ASPP(self.backbone(input))
+        x = self.classifier_block(self.ASPP(self.backbone(input)))
         return F.sigmoid(
             F.interpolate(
-                x, size=input.size()[-2:], mode="bilinear", align_corners=True
+                x, size=input.size()[-2:], mode="bilinear", align_corners=False
             )
         )
 

@@ -29,6 +29,6 @@ callbacks:
 logger:
   wandb:
     tags: ${tags}
-    group: "crak"
+    group: "crack"
   aim:
     experiment: "crack"

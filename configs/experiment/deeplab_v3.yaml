@@ -5,26 +5,23 @@
 
 defaults:
   - override /data: crack
-  - override /model: unet/unet_pp
+  - override /model: net/deeplab/deeplab_v3
   - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "unet_pp"]
+tags: ["crack", "DeepLab", "DeepLabV3"]
 
 seed: 42
 
 trainer:
   min_epochs: 100
-  max_epochs: 100
+  max_epochs: 500
 
 model:
   compile: false
-
-callbacks:
-  early_stopping: null
 
 logger:
   wandb:
