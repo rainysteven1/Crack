@@ -120,6 +120,23 @@ class BasicBlock(InitModule):
         self.layers.apply(lambda m: self.init(m))
 
 
+class IntermediateSequential(nn.Sequential):
+    def __init__(self, *args, return_intermediate: bool = False):
+        super().__init__(*args)
+        self.return_intermediate = return_intermediate
+
+    def forward(self, input: torch.Tensor):
+        if not self.return_intermediate:
+            return super().forward(input)
+
+        intermediate_outputs = list()
+        x = input
+        for module in self.children():
+            x = module(x)
+            intermediate_outputs.append(x)
+        return intermediate_outputs
+
+
 class OutputBlock(nn.Sequential):
     def __init__(
         self,

@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .attention import BoT_MHSA
-from .base import BasicBlock
+from .base import BasicBlock, IntermediateSequential
 
 PRETRAINED_MODELS = {
     "resnet34": "resources/checkpoints/resnet34-333f7ec4.pth",
@@ -159,7 +159,7 @@ class _InputBlock(nn.Sequential):
         )
 
 
-class _ResNet(nn.Sequential):
+class _ResNet(IntermediateSequential):
     """
     reference: https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py
     """
@@ -175,6 +175,7 @@ class _ResNet(nn.Sequential):
         img_size: Optional[int] = None,
         is_MHSA: Optional[bool] = None,
         n_heads: Optional[int] = None,
+        return_intermediate: bool = False,
     ) -> None:
 
         self.block_type = block
@@ -190,7 +191,8 @@ class _ResNet(nn.Sequential):
             *[
                 _InputBlock(input_dim, self.temp_dim),
                 *self._make_stages(),
-            ]
+            ],
+            return_intermediate=return_intermediate,
         )
 
         if pretrained:
@@ -312,6 +314,7 @@ def resnet101(
     strides: Optional[List[int]] = None,
     dilations: Optional[List[int]] = None,
     multi_grids: Optional[List[int]] = None,
+    return_intermediate: bool = False,
 ):
     n_stages = 4
     stage_cfg = copy.deepcopy(STAGE_CFG)
@@ -327,4 +330,5 @@ def resnet101(
         stage_cfg,
         pretrained,
         multi_grids,
+        return_intermediate=return_intermediate,
     )

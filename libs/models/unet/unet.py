@@ -34,7 +34,7 @@ class _DecoderBlock(nn.Module):
                 x,
                 [diff_x // 2, diff_x - diff_x // 2, diff_y // 2, diff_y - diff_y // 2],
             )
-        return self.conv_block(torch.cat([skip, x], dim=1))
+        return self.conv_block(torch.cat((skip, x), dim=1))
 
 
 class UNet(nn.Module):

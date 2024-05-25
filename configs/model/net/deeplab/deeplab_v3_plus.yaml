@@ -19,7 +19,7 @@ scheduler:
     epochs: ${trainer.max_epochs}
 
 net:
-  _target_: libs.models.deeplab.deeplab_v3.DeepLabV3
+  _target_: libs.models.deeplab.deeplab_v3.DeepLabV3Plus
   input_dim: 3
   output_dim: 1
   pretrained: true

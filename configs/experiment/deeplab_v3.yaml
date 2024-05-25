@@ -5,14 +5,14 @@
 
 defaults:
   - override /data: crack
-  - override /model: net/deeplab/deeplab_v3
+  - override /model: net/deeplab/deeplab_v3_plus
   - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "DeepLab", "DeepLabV3"]
+tags: ["crack", "DeepLab", "DeepLabV3Plus"]
 
 seed: 42
 

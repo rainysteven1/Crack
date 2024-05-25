@@ -23,7 +23,7 @@ class _DecoderBlock(nn.Module):
     def forward(self, input, skip=None):
         x = self.upsample(input)
         if skip:
-            x = torch.cat([x, skip], dim=1)
+            x = torch.cat((x, skip), dim=1)
         output = self.layers(x)
         return output
 
