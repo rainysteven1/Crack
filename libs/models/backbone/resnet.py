@@ -1,13 +1,16 @@
 import copy
 from collections import OrderedDict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .attention import BoT_MHSA
-from .base import BasicBlock, IntermediateSequential
+from ..modules.attention import BoT_MHSA
+from ..modules.base import BasicBlock, IntermediateSequential
+
+__all__ = ["resnet34", "resnet50", "resnet101"]
+
 
 PRETRAINED_MODELS = {
     "resnet34": "resources/checkpoints/resnet34-333f7ec4.pth",
@@ -17,7 +20,6 @@ PRETRAINED_MODELS = {
 
 STAGE_CFG = {
     "n_layers": [3, 4, 6, 3],
-    "dims": [64, 128, 256, 512],
     "strides": [1, 2, 2, 2],
     "dilations": [1, 1, 1, 1],
 }
@@ -33,12 +35,13 @@ class RedisualBlock(nn.Module):
         output_dim: int,
         stride: int = 1,
         skip_kernel_size: int = 1,
-        skip_padding: str | int = "same",
+        skip_padding: int = 0,
         is_identity: bool = False,
         is_bn: bool = True,
         is_bias: bool = False,
         reversed: bool = False,
         init_type: Optional[str] = None,
+        zero_init: bool = False,
     ) -> None:
         super().__init__()
 
@@ -58,7 +61,7 @@ class RedisualBlock(nn.Module):
                 is_relu=False,
                 is_bias=is_bias,
                 reversed=reversed,
-                init_type=init_type,
+                init_type="constant" if zero_init else init_type,
             ),
         )
         self.skip_block = (
@@ -92,19 +95,17 @@ class BottleNeck(RedisualBlock):
         middle_dim: int = None,
         stride: int = 1,
         dilation: int = 1,
-        skip_padding: str | int = "same",
         is_identity: bool = False,
-        is_bias: bool = False,
         reversed: bool = False,
-        img_size: int = 256,
-        is_MHSA: bool = False,
-        n_heads: int = 4,
+        MHSA_CFG: Optional[Dict] = None,
         init_type: Optional[str] = None,
+        zero_init: bool = False,
     ) -> None:
-        super().__init__(input_dim, output_dim, stride, 1, skip_padding, is_identity)
+        super().__init__(input_dim, output_dim, stride, 1, 0, is_identity)
         middle_dim = middle_dim or output_dim
+        is_bias = not reversed
 
-        if not is_MHSA:
+        if not MHSA_CFG:
             conv = BasicBlock(
                 middle_dim,
                 middle_dim,
@@ -116,7 +117,7 @@ class BottleNeck(RedisualBlock):
                 init_type=init_type,
             )
         else:
-            module_list = [BoT_MHSA(middle_dim, img_size, n_heads)]
+            module_list = [BoT_MHSA(middle_dim, **MHSA_CFG)]
             if not is_identity:
                 module_list.append(nn.AvgPool2d(kernel_size=2, stride=2))
             conv = nn.Sequential(*module_list)
@@ -139,7 +140,7 @@ class BottleNeck(RedisualBlock):
                 is_relu=False,
                 is_bias=is_bias,
                 reversed=reversed,
-                init_type=init_type,
+                init_type="constant" if zero_init else init_type,
             ),
         )
 
@@ -164,28 +165,28 @@ class _ResNet(IntermediateSequential):
     reference: https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py
     """
 
+    dims = [64, 128, 256, 512]
+
     def __init__(
         self,
-        resnet_type: str,
         block: RedisualBlock | BottleNeck,
         input_dim: int,
         stage_cfg: Dict[str, List[int]],
-        pretrained: bool,
+        init_type: Optional[str] = None,
+        zero_init: bool = False,
         multi_grids: Optional[List[int]] = None,
-        img_size: Optional[int] = None,
-        is_MHSA: Optional[bool] = None,
-        n_heads: Optional[int] = None,
+        MHSA_cfg: Optional[dict] = None,
         return_intermediate: bool = False,
     ) -> None:
 
         self.block_type = block
         self.stage_cfg = stage_cfg
         self.n_stages = len(self.stage_cfg["n_layers"])
-        self.temp_dim = self.stage_cfg["dims"][0]
+        self.temp_dim = self.dims[0]
+        self.init_type = init_type
+        self.zero_init = zero_init
         self.multi_grids = multi_grids
-        self.img_size = img_size
-        self.is_MHSA = is_MHSA
-        self.n_heads = n_heads
+        self.MHSA_cfg = MHSA_cfg
 
         super().__init__(
             *[
@@ -194,9 +195,6 @@ class _ResNet(IntermediateSequential):
             ],
             return_intermediate=return_intermediate,
         )
-
-        if pretrained:
-            self.load_from(torch.load(PRETRAINED_MODELS.get(resnet_type)))
 
     def _make_stages(self) -> List[nn.Sequential]:
         stages = list()
@@ -213,24 +211,25 @@ class _ResNet(IntermediateSequential):
 
             # layers
             for stride_idx, stride in enumerate(strides):
-                args = [self.temp_dim, self.stage_cfg["dims"][idx]]
+                args = [self.temp_dim, self.dims[idx]]
                 kwargs = {
                     "stride": stride,
-                    "skip_padding": 0,
                     "is_identity": stride_idx != 0,
+                    "init_type": self.init_type,
+                    "zero_init": self.zero_init and stride_idx == 0,
                 }
                 if self.block_type is BottleNeck:
                     kwargs["dilation"] = (
                         self.stage_cfg["dilations"][idx] * multi_grids[stride_idx]
                     )
-                    if self.is_MHSA and idx == self.n_stages - 1:
-                        kwargs["is_MHSA"] = self.is_MHSA
-                        kwargs["n_heads"] = self.n_heads
-                        kwargs["img_size"] = self.img_size
+                    if self.MHSA_cfg and idx == self.n_stages - 1:
+                        kwargs["MHSA_cfg"] = self.MHSA_cfg
                         if stride_idx == 0:
-                            self.img_size = self.img_size // self.block_type.expansion
+                            self.MHSA_cfg["img_size"] = (
+                                self.MHSA_cfg["img_size"] // self.block_type.expansion
+                            )
                 layers.append(self.block_type(*args, **kwargs))
-                self.temp_dim = self.stage_cfg["dims"][idx] * self.block_type.expansion
+                self.temp_dim = self.dims[idx] * self.block_type.expansion
 
             stages.append(nn.Sequential(*layers))
         return stages
@@ -259,7 +258,8 @@ class _ResNet(IntermediateSequential):
                 # conv_block
                 for idx, single_block in enumerate(list(conv_block.children())):
                     if self.block_type is RedisualBlock or (
-                        self.block_type is BottleNeck and (not self.is_MHSA or idx != 1)
+                        self.block_type is BottleNeck
+                        and (not self.MHSA_cfg or idx != 1)
                     ):
                         conv_idx = f"{prefix}.conv{idx+1}"
                         bn_idx = f"{prefix}.bn{idx+1}"
@@ -288,47 +288,41 @@ def _load_single_block_weight(
     bn.weight.data = weights.get(f"{bn_idx}.weight")
 
 
-def resnet34(input_dim: int, pretrained: bool):
-    return _ResNet("resnet34", RedisualBlock, input_dim, STAGE_CFG, pretrained)
-
-
-def resnet50(
-    input_dim: int, pretrained: bool, img_size: int, is_MHSA: bool, n_heads: int
-):
-    return _ResNet(
-        "resnet50",
-        BottleNeck,
-        input_dim,
-        STAGE_CFG,
-        pretrained,
-        None,
-        img_size,
-        is_MHSA,
-        n_heads,
-    )
-
-
-def resnet101(
+def _resnet(
+    arch: str,
+    block: Union[BottleNeck, RedisualBlock],
     input_dim: int,
+    stage_cfg: Dict[str, List[int]],
     pretrained: bool,
-    strides: Optional[List[int]] = None,
-    dilations: Optional[List[int]] = None,
-    multi_grids: Optional[List[int]] = None,
-    return_intermediate: bool = False,
+    **kwargs,
 ):
-    n_stages = 4
+    model = _ResNet(block, input_dim, stage_cfg, **kwargs)
+    if pretrained:
+        model.load_from(torch.load(PRETRAINED_MODELS.get(arch)))
+    return model
+
+
+def _get_stage_cfg(n_layers: List[int], **kwargs):
     stage_cfg = copy.deepcopy(STAGE_CFG)
-    stage_cfg["n_layers"] = [3, 4, 23, 3]
-    if strides and len(strides) == n_stages:
-        stage_cfg["strides"] = strides
-    if dilations and len(dilations) == n_stages:
-        stage_cfg["dilations"] = dilations
-    return _ResNet(
-        "resnet101",
-        BottleNeck,
-        input_dim,
-        stage_cfg,
-        pretrained,
-        multi_grids,
-        return_intermediate=return_intermediate,
+    stage_cfg["n_layers"] = n_layers
+    if kwargs["strides"]:
+        stage_cfg["strides"] = kwargs.pop("strides")
+    if kwargs["dilations"]:
+        stage_cfg["dilations"] = kwargs.pop("dilations")
+    return stage_cfg, kwargs
+
+
+def resnet34(input_dim: int, pretrained: bool, **kwargs):
+    return _resnet(
+        "resnet34", RedisualBlock, input_dim, STAGE_CFG, pretrained, **kwargs
     )
+
+
+def resnet50(input_dim: int, pretrained: bool, **kwargs):
+    stage_cfg, kwargs = _get_stage_cfg([3, 4, 6, 3], **kwargs)
+    return _resnet("resnet50", BottleNeck, input_dim, stage_cfg, pretrained, **kwargs)
+
+
+def resnet101(input_dim: int, pretrained: bool, **kwargs):
+    stage_cfg, kwargs = _get_stage_cfg([3, 4, 23, 3], **kwargs)
+    return _resnet("resnet101", BottleNeck, input_dim, stage_cfg, pretrained, **kwargs)

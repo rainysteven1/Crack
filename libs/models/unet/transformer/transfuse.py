@@ -7,9 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from omegaconf import DictConfig
 
+from ...backbone.resnet import BottleNeck, resnet34, resnet50
 from ...modules.attention import AttentionBlock
 from ...modules.base import BasicBlock
-from ...modules.resnet import BottleNeck, resnet34, resnet50
 from ...transformer.vit import VisionTransformer
 
 
@@ -97,7 +97,6 @@ class _BiFusionBlock(nn.Module):
             ch_dim1 + ch_dim2 + input_dim,
             output_dim // 4,
             output_dim // 2,
-            skip_padding=0,
             is_identity=is_identity,
             reversed=True,
             init_type=init_type,
@@ -189,7 +188,11 @@ class TransFuse(nn.Module):
         self.resnet = (
             resnet34(input_dim, pretrained=True)
             if config.resnet.type == "resnet34"
-            else resnet50(input_dim, img_size, is_MHSA=True, n_heads=4, pretrained=True)
+            else resnet50(
+                input_dim,
+                pretrained=True,
+                MHSA_cfg=dict([("img_size", img_size), ("n_heads", 4)]),
+            )
         )
         self.layers = list(self.resnet.children())
 

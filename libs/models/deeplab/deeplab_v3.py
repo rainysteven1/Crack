@@ -4,51 +4,41 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..backbone import resnet
 from ..modules.base import BasicBlock
 from ..modules.pyramid import ASPP_v3
-from ..modules.resnet import resnet101
 
 
-class DeepLabV3(nn.Module):
+class _DeepLabV3(nn.Module):
     """DeepLab v3: Dilated ResNet with multi-grid + improved ASPP"""
 
     def __init__(
         self,
-        input_dim: int,
         output_dim: int,
-        pretrained: bool,
-        strides: Optional[List[int]],
-        dilations: Optional[List[int]],
-        multi_grids: Optional[List[int]],
+        middle_dim: int,
+        backbone: nn.Sequential,
         atrous_rates: List[int],
         init_type: Optional[str],
-        return_intermediate: bool = False,
     ):
         super().__init__()
-        self.middle_dim = 256
 
-        self.backbone = resnet101(
-            input_dim, pretrained, strides, dilations, multi_grids, return_intermediate
-        )
-
-        aspp_input_dim = (
-            self.backbone.stage_cfg["dims"][-1] * self.backbone.block_type.expansion
-        )
+        self.backbone = backbone
+        aspp_input_dim = self.backbone.dims[-1] * self.backbone.block_type.expansion
         self.ASPP = ASPP_v3(
-            aspp_input_dim, self.middle_dim, atrous_rates, init_type=init_type
+            aspp_input_dim, middle_dim, atrous_rates, init_type=init_type
         )
 
-        concat_dim = self.middle_dim * (len(atrous_rates) + 2)
+        concat_dim = middle_dim * (len(atrous_rates) + 2)
         self.fc1 = BasicBlock(
             concat_dim,
-            self.middle_dim,
+            middle_dim,
             kernel_size=1,
             padding=0,
             is_bias=False,
             init_type=init_type,
         )
         self.fc2 = BasicBlock(
-            self.middle_dim,
+            middle_dim,
             output_dim,
             kernel_size=1,
             padding=0,
@@ -99,35 +89,22 @@ class DeepLabV3(nn.Module):
         self.backbone.freeze_bn()
 
 
-class DeepLabV3Plus(DeepLabV3):
+class _DeepLabV3Plus(_DeepLabV3):
     """DeepLab v3+: Dilated ResNet with multi-grid + improved ASPP + decoder."""
 
     def __init__(
         self,
-        input_dim: int,
         output_dim: int,
-        pretrained: bool,
-        strides: Optional[List[int]],
-        dilations: Optional[List[int]],
-        multi_grids: Optional[List[int]],
+        middle_dim: int,
+        backbone: nn.Sequential,
         atrous_rates: List[int],
         init_type: Optional[str],
     ):
-        super().__init__(
-            input_dim,
-            output_dim,
-            pretrained,
-            strides,
-            dilations,
-            multi_grids,
-            atrous_rates,
-            init_type,
-            return_intermediate=True,
-        )
+        super().__init__(output_dim, middle_dim, backbone, atrous_rates, init_type)
         reduce_dim = 48
 
         self.reduce = BasicBlock(
-            self.middle_dim,
+            middle_dim,
             reduce_dim,
             kernel_size=1,
             padding=0,
@@ -136,14 +113,12 @@ class DeepLabV3Plus(DeepLabV3):
         )
         self.fc2 = nn.Sequential(
             BasicBlock(
-                self.middle_dim + reduce_dim,
-                self.middle_dim,
+                middle_dim + reduce_dim,
+                middle_dim,
                 is_bias=False,
                 init_type=init_type,
             ),
-            BasicBlock(
-                self.middle_dim, self.middle_dim, is_bias=False, init_type=init_type
-            ),
+            BasicBlock(middle_dim, middle_dim, is_bias=False, init_type=init_type),
             self.fc2,
         )
 
@@ -156,8 +131,173 @@ class DeepLabV3Plus(DeepLabV3):
             mode="bilinear",
             align_corners=True,
         )
-        x = torch.cat((x, x_), dim=1)
         x = F.interpolate(
-            self.fc2(x), size=input.size()[-2:], mode="bilinear", align_corners=True
+            self.fc2(torch.cat((x, x_), dim=1)),
+            size=input.size()[-2:],
+            mode="bilinear",
+            align_corners=True,
         )
         return F.sigmoid(x)
+
+
+def _segm_resnet(
+    arch: str,
+    input_dim: int,
+    output_dim: int,
+    backbone: str,
+    output_stride: int,
+    pretrained: bool,
+    init_type: Optional[str],
+):
+    if arch == "DeepLabV3":
+        model = _DeepLabV3
+        return_intermediate = False
+    elif arch == "DeepLabV3+":
+        model = _DeepLabV3Plus
+        return_intermediate = True
+
+    if output_stride == 8:
+        backbone_cfg = {
+            "strides": [1, 2, 1, 1],
+            "dilations": [1, 1, 2, 2],
+            "multi_grids": [1, 2, 1],
+        }
+        atrous_rates = [12, 24, 36]
+    elif output_stride == 16:
+        backbone_cfg = {
+            "strides": [1, 2, 2, 1],
+            "dilations": [1, 1, 1, 2],
+            "multi_grids": [1, 2, 4],
+        }
+        atrous_rates = [6, 12, 18]
+
+    backbone_cfg["return_intermediate"] = return_intermediate
+    backbone_cfg["init_type"] = init_type
+    backbone = resnet.__dict__[backbone](
+        input_dim=input_dim, pretrained=pretrained, **backbone_cfg
+    )
+    return model(output_dim, 256, backbone, atrous_rates, init_type)
+
+
+def _load_model(
+    arch: str,
+    input_dim: int,
+    output_dim: int,
+    backbone: str,
+    output_stride: int,
+    pretrained: bool,
+    init_type: Optional[str],
+):
+    if backbone.startswith("resnet"):
+        model = _segm_resnet(
+            arch, input_dim, output_dim, backbone, output_stride, pretrained, init_type
+        )
+    return model
+
+
+def deeplabv3_resnet50(
+    input_dim: int,
+    output_dim: int,
+    output_stride: int,
+    pretrained: bool,
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3 model with a ResNet-50 backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3",
+        input_dim,
+        output_dim,
+        "resnet50",
+        output_stride,
+        pretrained,
+        init_type,
+    )
+
+
+def deeplabv3_resnet101(
+    input_dim: int,
+    output_dim: int,
+    output_stride: int,
+    pretrained: bool,
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3 model with a ResNet-101 backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3",
+        input_dim,
+        output_dim,
+        "resnet101",
+        output_stride,
+        pretrained,
+        init_type,
+    )
+
+
+def deeplabv3_plus_resnet50(
+    input_dim: int,
+    output_dim: int,
+    output_stride: int,
+    pretrained: bool,
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3+ model with a ResNet-50 backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3+",
+        input_dim,
+        output_dim,
+        "resnet50",
+        output_stride,
+        pretrained,
+        init_type,
+    )
+
+
+def deeplabv3_plus_resnet101(
+    input_dim: int,
+    output_dim: int,
+    output_stride: int,
+    pretrained: bool,
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3+ model with a ResNet-101 backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3+",
+        input_dim,
+        output_dim,
+        "resnet101",
+        output_stride,
+        pretrained,
+        init_type,
+    )

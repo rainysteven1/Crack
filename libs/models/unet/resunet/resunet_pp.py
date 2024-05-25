@@ -3,9 +3,9 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from ...backbone.resnet import RedisualBlock
 from ...modules.base import BasicBlock, OutputBlock, SqueezeExciteBlock
 from ...modules.pyramid import ASPP_v3
-from ...modules.resnet import RedisualBlock
 
 kwargs = {"skip_kernel_size": 3, "skip_padding": 1, "is_bias": True, "reversed": False}
 

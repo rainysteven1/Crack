@@ -3,8 +3,8 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from ...backbone.resnet import RedisualBlock
 from ...modules.base import OutputBlock
-from ...modules.resnet import RedisualBlock
 
 kwargs = {"skip_kernel_size": 3, "skip_padding": 1, "is_bias": True, "reversed": False}
 

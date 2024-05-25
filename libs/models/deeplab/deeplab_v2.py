@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..backbone.resnet import resnet101
 from ..modules.pyramid import ASPP_v2
-from ..modules.resnet import resnet101
 
 
 class DeepLabV2(nn.Module):
