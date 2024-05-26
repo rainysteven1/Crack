@@ -19,21 +19,11 @@ scheduler:
     epochs: ${trainer.max_epochs}
 
 net:
-  _target_: libs.models.deeplab.deeplab_v3.DeepLabV3
+  _target_: libs.models.deeplab.deeplabv2_resnet101
   input_dim: 3
   output_dim: 1
   pretrained: true
-  # output_stride==16
-  strides: [1, 2, 2, 1]
-  dilations: [1, 1, 1, 2]
-  multi_grids: [1, 2, 4]
-  atrous_rates: [6, 12, 18]
-  # output_stride==8
-  # strides: [1, 2, 1, 1]
-  # dilations: [1, 1, 2, 2]
-  # multi_grids: [1, 2, 1]
-  # atrous_rates: [12, 24, 36]
-  init_type: kaiming
+  init_type: "kaiming"
 
 # compile model for faster training with pytorch 2.0
 compile: false

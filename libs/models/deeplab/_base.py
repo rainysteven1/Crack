@@ -1,43 +1,32 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from ..backbone.resnet import resnet101
-from ..modules.pyramid import ASPP_v2
+from ..modules.base import IntermediateSequential
+from ..modules.pyramid import ASPP_v2, ASPP_v3
 
 
-class DeepLabV2(nn.Module):
-    """DeepLabV2: Dilated ResNet + ASPP"""
+class DeepLabHead(nn.Module):
 
     def __init__(
         self,
-        input_dim: int,
         output_dim: int,
-        pretrained: bool,
-        strides: Optional[List[int]],
-        dilations: Optional[List[int]],
+        middle_dim: Optional[int],
+        backbone: IntermediateSequential,
+        ASPP_arch: Union[ASPP_v2, ASPP_v3],
         atrous_rates: List[int],
         init_type: Optional[str],
     ) -> None:
         super().__init__()
+        aspp_input_dim = backbone.dims[-1] * backbone.block_type.expansion
+        self.middle_dim = middle_dim or output_dim
 
-        self.backbone = resnet101(input_dim, pretrained, strides, dilations)
-        aspp_input_dim = (
-            self.backbone.stage_cfg["dims"][-1] * self.backbone.block_type.expansion
-        )
-        self.ASPP = ASPP_v2(
-            aspp_input_dim, output_dim, atrous_rates, init_type=init_type
-        )
+        self.backbone = backbone
+        self.ASPP = ASPP_arch(aspp_input_dim, self.middle_dim, atrous_rates, init_type)
 
     def forward(self, input: torch.Tensor):
-        x = self.ASPP(self.backbone(input))
-        return F.sigmoid(
-            F.interpolate(
-                x, size=input.size()[-2:], mode="bilinear", align_corners=True
-            )
-        )
+        return self.ASPP(self.backbone(input))
 
     def get_params(self, keywords: Dict) -> list[Dict]:
         params = [

@@ -145,7 +145,7 @@ class BottleNeck(RedisualBlock):
         )
 
 
-class _InputBlock(nn.Sequential):
+class _Stem(nn.Sequential):
     def __init__(self, input_dim: int, output_dim: int) -> None:
         super().__init__(
             BasicBlock(
@@ -190,7 +190,7 @@ class _ResNet(IntermediateSequential):
 
         super().__init__(
             *[
-                _InputBlock(input_dim, self.temp_dim),
+                _Stem(input_dim, self.temp_dim),
                 *self._make_stages(),
             ],
             return_intermediate=return_intermediate,

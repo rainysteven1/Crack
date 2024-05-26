@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: crack
-  - override /model: net/deeplab/deeplab_v2
+  - override /model: net/deeplab/deeplabv3
   - override /callbacks: default
   - override /trainer: default
 

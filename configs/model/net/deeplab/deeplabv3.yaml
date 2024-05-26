@@ -6,7 +6,7 @@ criterion:
 optimizer:
   _target_: torch.optim.SGD
   _partial_: true
-  lr: 0.001
+  lr: 2.5e-4
   momentum: 0.9
   weight_decay: 5.0e-4
 
@@ -19,10 +19,12 @@ scheduler:
     epochs: ${trainer.max_epochs}
 
 net:
-  _target_: libs.models.deeplab.deeplab_v1.DeepLabV1
+  _target_: libs.models.deeplab.deeplabv3_resnet101
   input_dim: 3
   output_dim: 1
-  init_type: constant
+  pretrained: true
+  output_stride: 8
+  init_type: kaiming
 
 # compile model for faster training with pytorch 2.0
 compile: false
