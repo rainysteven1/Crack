@@ -11,6 +11,7 @@ class DeepLabHead(nn.Module):
 
     def __init__(
         self,
+        input_dim: int,
         output_dim: int,
         middle_dim: Optional[int],
         backbone: IntermediateSequential,
@@ -19,11 +20,10 @@ class DeepLabHead(nn.Module):
         init_type: Optional[str],
     ) -> None:
         super().__init__()
-        aspp_input_dim = backbone.dims[-1] * backbone.block_type.expansion
         self.middle_dim = middle_dim or output_dim
 
         self.backbone = backbone
-        self.ASPP = ASPP_arch(aspp_input_dim, self.middle_dim, atrous_rates, init_type)
+        self.ASPP = ASPP_arch(input_dim, self.middle_dim, atrous_rates, init_type)
 
     def forward(self, input: torch.Tensor):
         return self.ASPP(self.backbone(input))

@@ -1,6 +1,5 @@
 import copy
-from collections import OrderedDict
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, OrderedDict, Union
 
 import torch
 import torch.nn as nn
@@ -285,7 +284,13 @@ def _load_single_block_weight(
     conv = single_block_children[0]
     bn = single_block_children[1]
     conv.weight.data = weights.get(f"{conv_idx}.weight")
-    bn.weight.data = weights.get(f"{bn_idx}.weight")
+    bn_state_dict = {
+        "weight": weights.get(f"{bn_idx}.weight"),
+        "bias": weights.get(f"{bn_idx}.bias"),
+        "running_mean": weights.get(f"{bn_idx}.running_mean"),
+        "running_var": weights.get(f"{bn_idx}.running_var"),
+    }
+    bn.load_state_dict(bn_state_dict)
 
 
 def _resnet(

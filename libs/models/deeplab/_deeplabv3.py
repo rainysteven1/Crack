@@ -14,6 +14,7 @@ class DeepLabV3(DeepLabHead):
 
     def __init__(
         self,
+        input_dim: int,
         output_dim: int,
         middle_dim: Optional[int],
         backbone: IntermediateSequential,
@@ -21,7 +22,13 @@ class DeepLabV3(DeepLabHead):
         init_type: Optional[str],
     ):
         super().__init__(
-            output_dim, middle_dim, backbone, ASPP_v3, atrous_rates, init_type
+            input_dim,
+            output_dim,
+            middle_dim,
+            backbone,
+            ASPP_v3,
+            atrous_rates,
+            init_type,
         )
 
         concat_dim = self.middle_dim * (len(atrous_rates) + 2)
@@ -59,13 +66,19 @@ class DeepLabV3Plus(DeepLabV3):
 
     def __init__(
         self,
+        input_dim: int,
         output_dim: int,
         middle_dim: Optional[int],
         backbone: nn.Sequential,
         atrous_rates: List[int],
         init_type: Optional[str],
+        return_intermediate_index: int,
     ):
-        super().__init__(output_dim, middle_dim, backbone, atrous_rates, init_type)
+        super().__init__(
+            input_dim, output_dim, middle_dim, backbone, atrous_rates, init_type
+        )
+        self.return_intermediate_index = return_intermediate_index
+
         reduce_dim = 48
 
         self.reduce = BasicBlock(
@@ -91,7 +104,7 @@ class DeepLabV3Plus(DeepLabV3):
 
     def forward(self, input: torch.Tensor):
         x_list = self.backbone(input)
-        x_ = self.reduce(x_list[1])
+        x_ = self.reduce(x_list[self.return_intermediate_index])
         x = F.interpolate(
             self.fc1(self.ASPP(x_list[-1])),
             size=x_.size()[-2:],

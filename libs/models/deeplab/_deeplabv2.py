@@ -13,6 +13,7 @@ class DeepLabV2(DeepLabHead):
 
     def __init__(
         self,
+        input_dim: int,
         output_dim: int,
         middle_dim: Optional[int],
         backbone: IntermediateSequential,
@@ -20,7 +21,13 @@ class DeepLabV2(DeepLabHead):
         init_type: Optional[str],
     ) -> None:
         super().__init__(
-            output_dim, middle_dim, backbone, ASPP_v2, atrous_rates, init_type
+            input_dim,
+            output_dim,
+            middle_dim,
+            backbone,
+            ASPP_v2,
+            atrous_rates,
+            init_type,
         )
 
     def forward(self, input: torch.Tensor):

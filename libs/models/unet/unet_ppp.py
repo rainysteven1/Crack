@@ -3,7 +3,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import LambdaLR
 
 from ..modules.base import BasicBlock, InitModule, OutputBlock
 from .common import Encoder
@@ -27,9 +26,7 @@ class _DecoderBlock(nn.Module):
             self.layers.append(
                 nn.Sequential(
                     nn.MaxPool2d(arr[i], arr[i], ceil_mode=True),
-                    BasicBlock(
-                        filters[i], cat_dim, padding="same", init_type=init_type
-                    ),
+                    BasicBlock(filters[i], cat_dim, init_type=init_type),
                 )
             )
         self.layers.append(BasicBlock(filters[zero_idx], cat_dim, padding=1))
@@ -37,15 +34,11 @@ class _DecoderBlock(nn.Module):
             self.layers.append(
                 nn.Sequential(
                     nn.Upsample(scale_factor=arr[i], mode="bilinear"),
-                    BasicBlock(
-                        filters[i], cat_dim, padding="same", init_type=init_type
-                    ),
+                    BasicBlock(filters[i], cat_dim, init_type=init_type),
                 ),
             )
 
-        self.output_layer = BasicBlock(
-            up_dim, up_dim, padding="same", init_type=init_type
-        )
+        self.output_layer = BasicBlock(up_dim, up_dim, init_type=init_type)
 
     def forward(self, *inputs):
         x_list = list()
