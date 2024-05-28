@@ -124,5 +124,19 @@ class ASPP_v3(nn.Module):
         )
         self.module_list.append(_ASPPPooling(input_dim, output_dim, init_type))
 
+        self.project = nn.Sequential(
+            BasicBlock(
+                len(self.module_list) * output_dim,
+                output_dim,
+                kernel_size=1,
+                padding=0,
+                is_bias=False,
+                init_type=init_type,
+            ),
+            nn.Dropout(0.5),
+        )
+
     def forward(self, input: torch.Tensor):
-        return torch.cat([module(input) for module in self.module_list], dim=1)
+        return self.project(
+            torch.cat([module(input) for module in self.module_list], dim=1)
+        )

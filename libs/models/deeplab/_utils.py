@@ -1,5 +1,7 @@
 from typing import Optional
 
+import torch.nn as nn
+
 from ..backbone import mobilenet, resnet
 from ._deeplabv1 import DeepLabV1
 from ._deeplabv2 import DeepLabV2
@@ -73,37 +75,50 @@ def _segm_mobilenet(
     arch: str,
     input_dim: int,
     output_dim: int,
-    backbone: int,
+    backbone_name: str,
     pretrained: bool,
     output_stride: int,
     init_type: Optional[str],
+    **kwargs
 ):
+    assert output_stride
     model = _ARCH_DICT[arch]
-    middle_dim = 24
-    model_cfg = {"return_intermediate_index": 2}
-
-    if arch == "DeepLabV2":
-        middle_dim = None
-
-    atrous_rates = [12, 24, 36] if output_stride == 8 else [6, 12, 18]
     backbone_cfg = {
         "output_stride": output_stride,
         "width_mult": 1.0,
+        "inverted_redisual_cfg": None,
         "init_type": init_type,
-        "return_intermediate": True,
+        "return_intermediate": False,
+        **kwargs,
+    }
+    model_cfg = {
+        "middle_dim": None,
+        "atrous_rates": [12, 24, 36] if output_stride == 8 else [6, 12, 18],
+        "init_type": init_type,
     }
 
-    backbone = mobilenet.mobilenetv2(input_dim, pretrained, **backbone_cfg)
-    aspp_input_dim = backbone.inverted_redisual_cfg[-1][1]
-    return model(
-        aspp_input_dim,
-        output_dim,
-        middle_dim,
-        backbone,
-        atrous_rates,
-        init_type,
-        **model_cfg
+    if arch == "DeepLabV3+":
+        backbone_cfg["return_intermediate"] = True
+        if backbone_name == "mobilenetv2":
+            model_cfg["return_intermediate_index"] = 2
+        elif backbone_name.startswith("mobilenetv3"):
+            model_cfg["return_intermediate_index"] = 4
+
+    if backbone_name == "mobilenetv2":
+        dim_index = 1
+    else:
+        dim_index = 2
+        backbone_cfg["inverted_redisual_cfg"] = backbone_name.split("_")[-1]
+
+    backbone: nn.Module = mobilenet.__dict__[backbone_name](
+        input_dim, pretrained, **backbone_cfg
     )
+    if arch == "DeepLabV3+":
+        model_cfg["middle_dim"] = backbone.inverted_redisual_cfg[
+            model_cfg["return_intermediate_index"] - 1
+        ][dim_index]
+    aspp_input_dim = backbone.inverted_redisual_cfg[-1][dim_index]
+    return model(aspp_input_dim, output_dim, backbone=backbone, **model_cfg)
 
 
 def _load_model(
@@ -114,13 +129,21 @@ def _load_model(
     pretrained: bool,
     output_stride: Optional[int],
     init_type: Optional[str],
+    **kwargs
 ):
-    if backbone == "mobilenetv2":
+    if backbone.startswith("mobilenet"):
         model = _segm_mobilenet
     elif backbone.startswith("resnet"):
         model = _segm_resnet
     return model(
-        arch, input_dim, output_dim, backbone, pretrained, output_stride, init_type
+        arch,
+        input_dim,
+        output_dim,
+        backbone,
+        pretrained,
+        output_stride,
+        init_type,
+        **kwargs
     )
 
 
@@ -138,7 +161,28 @@ def deeplabv2_resnet101(
     pretrained: bool,
     init_type: Optional[str],
 ):
-    """Constructs a DeepLabV3 model with a ResNet-101 backbone.
+    """Constructs a DeepLabV2 model with a ResNet-101 backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV2", input_dim, output_dim, "resnet101", pretrained, None, init_type
+    )
+
+
+def deeplabv2_mobilenetv2(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: int,
+    init_type: Optional[str],
+    **kwargs
+):
+    """Constructs a DeepLabV2 model with a MobileNetV2 backbone.
 
     Args:
         input_dim (int): number of input channels.
@@ -148,7 +192,14 @@ def deeplabv2_resnet101(
         init_type (str): initialization type.
     """
     return _load_model(
-        "DeepLabV2", input_dim, output_dim, "resnet101", pretrained, None, init_type
+        "DeepLabV2",
+        input_dim,
+        output_dim,
+        "mobilenetv2",
+        pretrained,
+        output_stride,
+        init_type,
+        **kwargs
     )
 
 
@@ -156,8 +207,8 @@ def deeplabv2_resnet101(
 def deeplabv3_resnet50(
     input_dim: int,
     output_dim: int,
-    output_stride: int,
     pretrained: bool,
+    output_stride: int,
     init_type: Optional[str],
 ):
     """Constructs a DeepLabV3 model with a ResNet-50 backbone.
@@ -183,8 +234,8 @@ def deeplabv3_resnet50(
 def deeplabv3_resnet101(
     input_dim: int,
     output_dim: int,
-    output_stride: int,
     pretrained: bool,
+    output_stride: int,
     init_type: Optional[str],
 ):
     """Constructs a DeepLabV3 model with a ResNet-101 backbone.
@@ -210,9 +261,10 @@ def deeplabv3_resnet101(
 def deeplabv3_mobilenetv2(
     input_dim: int,
     output_dim: int,
-    output_stride: int,
     pretrained: bool,
+    output_stride: int,
     init_type: Optional[str],
+    **kwargs
 ):
     """Constructs a DeepLabV3 model with a MobileNetV2 backbone.
 
@@ -231,6 +283,65 @@ def deeplabv3_mobilenetv2(
         pretrained,
         output_stride,
         init_type,
+        **kwargs
+    )
+
+
+def deeplabv3_mobilenetv3_large(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: int,
+    init_type: Optional[str],
+    **kwargs
+):
+    """Constructs a DeepLabV3 model with a MobileNetV3_Large backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3",
+        input_dim,
+        output_dim,
+        "mobilenetv3_large",
+        pretrained,
+        output_stride,
+        init_type,
+        **kwargs
+    )
+
+
+def deeplabv3_mobilenetv3_small(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: int,
+    init_type: Optional[str],
+    **kwargs
+):
+    """Constructs a DeepLabV3 model with a MobileNetV3_Small backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3",
+        input_dim,
+        output_dim,
+        "mobilenetv3_small",
+        pretrained,
+        output_stride,
+        init_type,
+        **kwargs
     )
 
 
@@ -238,8 +349,8 @@ def deeplabv3_mobilenetv2(
 def deeplabv3_plus_resnet50(
     input_dim: int,
     output_dim: int,
-    output_stride: int,
     pretrained: bool,
+    output_stride: int,
     init_type: Optional[str],
 ):
     """Constructs a DeepLabV3+ model with a ResNet-50 backbone.
@@ -265,8 +376,8 @@ def deeplabv3_plus_resnet50(
 def deeplabv3_plus_resnet101(
     input_dim: int,
     output_dim: int,
-    output_stride: int,
     pretrained: bool,
+    output_stride: int,
     init_type: Optional[str],
 ):
     """Constructs a DeepLabV3+ model with a ResNet-101 backbone.
@@ -292,9 +403,10 @@ def deeplabv3_plus_resnet101(
 def deeplabv3_plus_mobilenetv2(
     input_dim: int,
     output_dim: int,
-    output_stride: int,
     pretrained: bool,
+    output_stride: int,
     init_type: Optional[str],
+    **kwargs
 ):
     """Constructs a DeepLabV3+ model with a MobileNetV2 backbone.
 
@@ -313,4 +425,63 @@ def deeplabv3_plus_mobilenetv2(
         pretrained,
         output_stride,
         init_type,
+        **kwargs
+    )
+
+
+def deeplabv3_plus_mobilenetv3_large(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: int,
+    init_type: Optional[str],
+    **kwargs
+):
+    """Constructs a DeepLabV3+ model with a MobileNetV3_Large backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3+",
+        input_dim,
+        output_dim,
+        "mobilenetv3_large",
+        pretrained,
+        output_stride,
+        init_type,
+        **kwargs
+    )
+
+
+def deeplabv3_plus_mobilenetv3_small(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: int,
+    init_type: Optional[str],
+    **kwargs
+):
+    """Constructs a DeepLabV3+ model with a MobileNetV3_Small backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3+",
+        input_dim,
+        output_dim,
+        "mobilenetv3_small",
+        pretrained,
+        output_stride,
+        init_type,
+        **kwargs
     )

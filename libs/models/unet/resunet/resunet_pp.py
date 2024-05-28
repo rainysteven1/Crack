@@ -7,6 +7,8 @@ from ...backbone.resnet import RedisualBlock
 from ...modules.base import BasicBlock, OutputBlock, SqueezeExciteBlock
 from ...modules.pyramid import ASPP_v3
 
+__all__ = ["ResUNet2Plus"]
+
 kwargs = {"skip_kernel_size": 3, "skip_padding": 1, "is_bias": True, "reversed": False}
 
 
@@ -59,6 +61,7 @@ class ResUNet2Plus(nn.Module):
         self, input_dim: int, output_dim: int, init_type: Optional[str] = None
     ) -> None:
         super().__init__()
+        atrous_rates = [1, 6, 12, 18]
         length = len(self.layer_configurations)
         kwargs.update({"init_type": init_type})
 
@@ -79,7 +82,14 @@ class ResUNet2Plus(nn.Module):
                 )
                 for i in range(length - 2)
             ]
-            + [ASPP_v3(self.layer_configurations[-2], self.layer_configurations[-1])]
+            + [
+                ASPP_v3(
+                    self.layer_configurations[-2],
+                    self.layer_configurations[-1],
+                    atrous_rates,
+                    init_type,
+                )
+            ]
         )
         kwargs.update({"skip_kernel_size": 1, "skip_padding": 0})
         self.decoder_blocks = nn.ModuleList(
@@ -91,7 +101,12 @@ class ResUNet2Plus(nn.Module):
             for i in range(length - 1, 1, -1)
         )
         self.output_block = nn.Sequential(
-            ASPP_v3(self.layer_configurations[1], self.layer_configurations[0]),
+            ASPP_v3(
+                self.layer_configurations[1],
+                self.layer_configurations[0],
+                atrous_rates,
+                init_type,
+            ),
             OutputBlock(self.layer_configurations[0], output_dim, init_type=init_type),
         )
 

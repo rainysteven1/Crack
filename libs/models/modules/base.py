@@ -8,18 +8,40 @@ from ...utils.init import InitModule
 
 
 class SqueezeExciteBlock(nn.Module):
-    def __init__(self, filters: int, ratio: int = 8) -> None:
+    def __init__(
+        self,
+        input_dim: int,
+        middle_dim: Optional[int] = None,
+        ratio: int = 8,
+        activation: nn.Module = nn.ReLU,
+        scale_activation: nn.Module = nn.Sigmoid,
+        is_bias: bool = False,
+    ) -> None:
         super().__init__()
+        self.is_linear = middle_dim is None
+        middle_dim = middle_dim or math.ceil(input_dim / ratio)
 
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.layers = nn.Sequential(
-            nn.Linear(filters, filters // ratio, bias=False),
-            nn.ReLU(),
-            nn.Linear(filters // ratio, filters, bias=False),
-            nn.Sigmoid(),
-        )
+        if self.is_linear:
+            self.pool = nn.AdaptiveAvgPool2d(1)
+            layers = [
+                nn.Linear(input_dim, middle_dim, bias=is_bias),
+                nn.Linear(middle_dim, input_dim, bias=is_bias),
+            ]
+        else:
+            self.pool = None
+            layers = [
+                nn.AdaptiveAvgPool2d(1),
+                nn.Conv2d(input_dim, middle_dim, 1, bias=is_bias),
+                nn.Conv2d(middle_dim, input_dim, 1, bias=is_bias),
+            ]
+
+        layers.insert(-1, activation())
+        layers.append(scale_activation())
+        self.layers = nn.Sequential(*layers)
 
     def forward(self, input: torch.Tensor):
+        if not self.is_linear:
+            return input * self.layers(input)
         n, c, _, _ = input.shape
         x = self.pool(input).view(n, c)
         x = self.layers(x).view(n, c, 1, 1)

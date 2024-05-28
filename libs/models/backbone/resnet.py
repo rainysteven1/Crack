@@ -131,6 +131,7 @@ class BottleNeck(RedisualBlock):
                 init_type=init_type,
             ),
             conv,
+            # Linear bottlenecks：Elwise + with No ReLU at the end of a bottleneck
             BasicBlock(
                 middle_dim,
                 output_dim * self.expansion,
@@ -161,7 +162,7 @@ class _Stem(nn.Sequential):
 
 class _ResNet(IntermediateSequential):
     """
-    reference: https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py
+    Reference: https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py
     """
 
     dims = [64, 128, 256, 512]

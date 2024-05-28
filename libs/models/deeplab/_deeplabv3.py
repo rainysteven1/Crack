@@ -31,16 +31,7 @@ class DeepLabV3(DeepLabHead):
             init_type,
         )
 
-        concat_dim = self.middle_dim * (len(atrous_rates) + 2)
-        self.fc1 = BasicBlock(
-            concat_dim,
-            self.middle_dim,
-            kernel_size=1,
-            padding=0,
-            is_bias=False,
-            init_type=init_type,
-        )
-        self.fc2 = BasicBlock(
+        self.project = BasicBlock(
             self.middle_dim,
             output_dim,
             kernel_size=1,
@@ -52,17 +43,20 @@ class DeepLabV3(DeepLabHead):
         )
 
     def forward(self, input: torch.Tensor):
-        x = super().forward(input)
-        x = self.fc2(self.fc1(x))
         return F.sigmoid(
             F.interpolate(
-                x, size=input.size()[-2:], mode="bilinear", align_corners=False
+                self.project(super().forward(input)),
+                size=input.size()[-2:],
+                mode="bilinear",
+                align_corners=False,
             )
         )
 
 
 class DeepLabV3Plus(DeepLabV3):
     """DeepLab v3+: Dilated ResNet with multi-grid + improved ASPP + decoder."""
+
+    reduce_dim = 48
 
     def __init__(
         self,
@@ -79,19 +73,17 @@ class DeepLabV3Plus(DeepLabV3):
         )
         self.return_intermediate_index = return_intermediate_index
 
-        reduce_dim = 48
-
         self.reduce = BasicBlock(
             self.middle_dim,
-            reduce_dim,
+            self.reduce_dim,
             kernel_size=1,
             padding=0,
             is_bias=False,
             init_type=init_type,
         )
-        self.fc2 = nn.Sequential(
+        self.project = nn.Sequential(
             BasicBlock(
-                self.middle_dim + reduce_dim,
+                self.middle_dim + self.reduce_dim,
                 self.middle_dim,
                 is_bias=False,
                 init_type=init_type,
@@ -99,20 +91,20 @@ class DeepLabV3Plus(DeepLabV3):
             BasicBlock(
                 self.middle_dim, self.middle_dim, is_bias=False, init_type=init_type
             ),
-            self.fc2,
+            self.project,
         )
 
     def forward(self, input: torch.Tensor):
         x_list = self.backbone(input)
         x_ = self.reduce(x_list[self.return_intermediate_index])
         x = F.interpolate(
-            self.fc1(self.ASPP(x_list[-1])),
+            self.ASPP(x_list[-1]),
             size=x_.size()[-2:],
             mode="bilinear",
             align_corners=True,
         )
         x = F.interpolate(
-            self.fc2(torch.cat((x, x_), dim=1)),
+            self.project(torch.cat((x, x_), dim=1)),
             size=input.size()[-2:],
             mode="bilinear",
             align_corners=True,
