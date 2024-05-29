@@ -1,1 +1,2 @@
-from . import resnet
+# TODO hrnet DRN
+from . import mobilenet, resnet, xception

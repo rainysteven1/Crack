@@ -1,7 +1,7 @@
 _target_: src.models.module.BaseModule
 
 criterion:
-  _target_: torch.nn.BCELoss
+  _target_: libs.utils.losses.FocalLoss
 
 optimizer:
   _target_: torch.optim.SGD
@@ -19,7 +19,7 @@ scheduler:
     epochs: ${trainer.max_epochs}
 
 net:
-  _target_: libs.models.deeplab.deeplabv3_resnet101
+  _target_: libs.models.deeplab.deeplabv3_plus_mobilenetv2
   input_dim: 3
   output_dim: 1
   pretrained: true

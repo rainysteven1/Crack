@@ -12,7 +12,7 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "DeepLab", "DeepLabV2"]
+tags: ["crack", "DeepLab", "DeepLabV3+"]
 
 seed: 42
 
@@ -22,9 +22,6 @@ trainer:
 
 model:
   compile: false
-
-callbacks:
-  early_stopping: null
 
 logger:
   wandb:

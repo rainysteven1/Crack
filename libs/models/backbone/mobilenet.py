@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..modules.base import BasicBlock, IntermediateSequential, SqueezeExciteBlock
+from ._utils import fixed_padding
 
 __all__ = ["mobilenetv2", "mobilenetv3", "mobilenetv3_large", "mobilenetv3_small"]
 
@@ -77,14 +78,6 @@ def _make_divisible(v: float, divisor: int, min_value: Optional[int] = None) -> 
     if new_v < 0.9 * v:
         new_v += divisor
     return new_v
-
-
-def _fixed_padding(kernel_size: int, dilation: int):
-    kernel_size_effective = kernel_size + (kernel_size - 1) * (dilation - 1)
-    pad_total = kernel_size_effective - 1
-    pad_beg = pad_total // 2
-    pad_end = pad_total - pad_beg
-    return (pad_beg, pad_end, pad_beg, pad_end)
 
 
 class _InvertedResidual(nn.Sequential):
@@ -160,10 +153,10 @@ class _InvertedResidual(nn.Sequential):
             )
 
         super().__init__(*conv_list)
-        self.input_padding = _fixed_padding(3, dilation)
+        self.input_padding = fixed_padding(3, dilation)
 
     def forward(self, input: torch.Tensor):
-        x_pad = input if self.padding != 0 else F.pad(input, self.input_padding)
+        x_pad = input if self.padding else F.pad(input, self.input_padding)
         return (
             super().forward(x_pad)
             if not self.is_redisual
@@ -180,7 +173,6 @@ class _MoblieNetHead(IntermediateSequential):
         width_mult: float,
         inverted_redisual_cfg: Optional[List],
         init_type: Optional[str],
-        is_dilation: bool,
         return_intermediate: bool,
         round_nearest: int = 8,
     ) -> None:
@@ -189,7 +181,8 @@ class _MoblieNetHead(IntermediateSequential):
         self.width_mult = width_mult
         self.inverted_redisual_cfg = inverted_redisual_cfg
         self.init_type = init_type
-        self.is_dilation = is_dilation
+        self.is_dilation = output_stride is not None
+        self.return_intermediate = return_intermediate
         self.round_nearest = round_nearest
 
         first_output_dim = _make_divisible(
@@ -241,11 +234,10 @@ class _MobileNetV2(_MoblieNetHead):
     def __init__(
         self,
         input_dim: int,
-        output_stride: int,
+        output_stride: Optional[int],
         width_mult: float,
         inverted_redisual_cfg: Optional[List],
         init_type: Optional[str],
-        is_dilation: bool,
         return_intermediate: bool,
     ) -> None:
         inverted_redisual_cfg = (
@@ -258,7 +250,6 @@ class _MobileNetV2(_MoblieNetHead):
             width_mult,
             inverted_redisual_cfg,
             init_type,
-            is_dilation,
             return_intermediate,
         )
 
@@ -268,14 +259,18 @@ class _MobileNetV2(_MoblieNetHead):
         # stages
         for t, c, n, s in self.inverted_redisual_cfg:
             # use Dilated Convolution
-            if self.current_stride == self.output_stride:
-                stride = 1
-                dilation = rate
-                rate *= stride
-            else:
+            if not self.is_dilation:
                 stride = s
                 dilation = 1
-                self.current_stride *= s
+            else:
+                if self.current_stride == self.output_stride:
+                    stride = 1
+                    dilation = rate
+                    rate *= stride
+                else:
+                    stride = s
+                    dilation = 1
+                    self.current_stride *= s
             output_dim = _make_divisible(c * self.width_mult, self.round_nearest)
             stage = list()
             # layers
@@ -286,9 +281,9 @@ class _MobileNetV2(_MoblieNetHead):
                         output_dim,
                         None,
                         kernel_size=3,
-                        stride=1 if i != 0 else s if not self.is_dilation else stride,
+                        stride=1 if i != 0 else stride,
                         padding=0,
-                        dilation=1 if not self.is_dilation else dilation,
+                        dilation=dilation,
                         ratio=t,
                         is_redisual=stride == 1 and self.middle_dim == output_dim,
                         is_se=False,
@@ -301,7 +296,7 @@ class _MobileNetV2(_MoblieNetHead):
         return stages
 
     def load_from(self, weights: OrderedDict):
-        model_dict = {}
+        model_dict = dict()
         state_dict = self.state_dict()
         prefix_0 = "features.0{}"
         prefix_conv = "features.{}.conv.{}"
@@ -337,11 +332,10 @@ class _MobileNetV3(_MoblieNetHead):
     def __init__(
         self,
         input_dim: int,
-        output_stride: int,
+        output_stride: Optional[int],
         width_mult: float,
         inverted_redisual_cfg: Optional[Union[str, List]],
         init_type: Optional[str],
-        is_dilation: bool,
         return_intermediate: bool,
     ) -> None:
         self.mode = None
@@ -363,7 +357,6 @@ class _MobileNetV3(_MoblieNetHead):
             width_mult,
             inverted_redisual_cfg,
             init_type,
-            is_dilation,
             return_intermediate,
         )
 
@@ -373,14 +366,18 @@ class _MobileNetV3(_MoblieNetHead):
         # stages
         for idx, (k, exp, c, se, nl, s) in enumerate(self.inverted_redisual_cfg):
             # use Dilated Convolution
-            if self.current_stride == self.output_stride:
-                stride = 1
-                dilation = rate
-                rate *= stride
-            else:
+            if not self.is_dilation:
                 stride = s
                 dilation = 1
-                self.current_stride *= s
+            else:
+                if self.current_stride == self.output_stride:
+                    stride = 1
+                    dilation = rate
+                    rate *= stride
+                else:
+                    stride = s
+                    dilation = 1
+                    self.current_stride *= s
             output_dim = _make_divisible(c * self.width_mult, self.round_nearest)
             stages.append(
                 _InvertedResidual(
@@ -388,9 +385,9 @@ class _MobileNetV3(_MoblieNetHead):
                     output_dim,
                     exp,
                     kernel_size=k,
-                    stride=s if not self.is_dilation else stride,
+                    stride=stride,
                     padding=(k - 1) // 2,
-                    dilation=1 if not self.is_dilation else dilation,
+                    dilation=dilation,
                     ratio=1 if idx == 0 else None,
                     is_redisual=s == 1 and self.middle_dim == output_dim,
                     is_se=se,
@@ -405,16 +402,15 @@ class _MobileNetV3(_MoblieNetHead):
         se_list = [
             idx + 1 for idx, cfg in enumerate(self.inverted_redisual_cfg) if cfg[3]
         ]
-        model_dict = {}
-        state_dict = self.state_dict()
+        model_dict = dict()
         prefix_0 = "features.0{}"
         prefix_block = "features.{}.block.{}"
-        for key in state_dict.keys():
-            if key.startswith("0"):
+        for key in self.state_dict().keys():
+            str_list = key.split(".")
+            n_block = int(str_list[0])
+            if n_block == 0:
                 model_dict[key] = weights[prefix_0.format(key.split("layers")[-1])]
             else:
-                str_list = key.split(".")
-                n_block = int(str_list[0])
                 n_layer = int(str_list[1])
                 suffix = str_list[-2:]
                 se_layer = 2
@@ -425,8 +421,8 @@ class _MobileNetV3(_MoblieNetHead):
                 model_dict[key] = weights[
                     prefix_block.format(n_block, ".".join([str(n_layer)] + suffix))
                 ]
-        state_dict.update(model_dict)
-        self.load_state_dict(state_dict)
+        self.state_dict().update(model_dict)
+        self.load_state_dict(self.state_dict())
 
 
 def mobilenetv2(input_dim: int, pretrained: bool, **kwargs):
