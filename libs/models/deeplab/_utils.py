@@ -167,7 +167,7 @@ def _load_model(
 ):
     if backbone.startswith("mobilenet"):
         model = _segm_mobilenet
-    elif backbone.startswith("resnet"):
+    elif backbone.startswith("res"):
         model = _segm_resnet
     elif backbone == "xception":
         model = _segm_xception
@@ -409,6 +409,60 @@ def deeplabv3_resnet101(
     )
 
 
+def deeplabv3_resnext50_32x4d(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: Optional[int],
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3 model with a ResNext-50-32x4d backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3",
+        input_dim,
+        output_dim,
+        "resnext50_32x4d",
+        pretrained,
+        output_stride,
+        init_type,
+    )
+
+
+def deeplabv3_resnext101_32x8d(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: Optional[int],
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3 model with a ResNext-101-32x8d backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3",
+        input_dim,
+        output_dim,
+        "resnext101_32x8d",
+        pretrained,
+        output_stride,
+        init_type,
+    )
+
+
 def deeplabv3_xception(
     input_dim: int,
     output_dim: int,
@@ -568,6 +622,60 @@ def deeplabv3_plus_resnet101(
         input_dim,
         output_dim,
         "resnet101",
+        pretrained,
+        output_stride,
+        init_type,
+    )
+
+
+def deeplabv3_plus_resnext50_32x4d(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: Optional[int],
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3+ model with a ResNext-50-32x4d backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3+",
+        input_dim,
+        output_dim,
+        "resnext50_32x4d",
+        pretrained,
+        output_stride,
+        init_type,
+    )
+
+
+def deeplabv3_plus_resnext101_32x8d(
+    input_dim: int,
+    output_dim: int,
+    pretrained: bool,
+    output_stride: Optional[int],
+    init_type: Optional[str],
+):
+    """Constructs a DeepLabV3+ model with a ResNext-101-32x8d backbone.
+
+    Args:
+        input_dim (int): number of input channels.
+        output_dim (int): number of classes.
+        output_stride (int): output stride for deeplab.
+        pretrained_backbone (bool): If True, use the pretrained backbone.
+        init_type (str): initialization type.
+    """
+    return _load_model(
+        "DeepLabV3+",
+        input_dim,
+        output_dim,
+        "resnext101_32x8d",
         pretrained,
         output_stride,
         init_type,

@@ -9,16 +9,16 @@ from ._utils import fixed_padding
 
 __all__ = ["mobilenetv2", "mobilenetv3", "mobilenetv3_large", "mobilenetv3_small"]
 
-PRETRAINED_MODELS = {
+_PRETRAINED_MODELS = {
     "mobilenetv2": "resources/checkpoints/mobilenet_v2-b0353104.pth",
     "mobilenetv3_large": "resources/checkpoints/mobilenet_v3_large-8738ca79.pth",
     "mobilenetv3_small": "resources/checkpoints/mobilenet_v3_small-047dcff4.pth",
 }
 
-KERNEL_SIZES = [3, 5]
-STRIDES = [1, 2]
+_KERNEL_SIZES = [3, 5]
+_STRIDES = [1, 2]
 
-MOBILENET_V2_CFG = [
+_MOBILENET_V2_CFG = [
     # t, c, n, s
     [1, 16, 1, 1],
     [6, 24, 2, 2],
@@ -29,7 +29,7 @@ MOBILENET_V2_CFG = [
     [6, 320, 1, 1],
 ]
 
-MOBILENET_V3_CFG_LARGE = [
+_MOBILENET_V3_CFG_LARGE = [
     # k, exp, c, se, nl, s,
     [3, 16, 16, False, "RE", 1],
     [3, 64, 24, False, "RE", 2],
@@ -48,7 +48,7 @@ MOBILENET_V3_CFG_LARGE = [
     [5, 960, 160, True, "HS", 1],
 ]
 
-MOBILENET_V3_CFG_SMALL = [
+_MOBILENET_V3_CFG_SMALL = [
     # k, exp, c, se, nl, s,
     [3, 16, 16, True, "RE", 2],
     [3, 72, 24, False, "RE", 2],
@@ -96,8 +96,8 @@ class _InvertedResidual(nn.Sequential):
         relu_type: nn.Module,
         init_type: Optional[str],
     ) -> None:
-        assert kernel_size in KERNEL_SIZES
-        assert stride in STRIDES
+        assert kernel_size in _KERNEL_SIZES
+        assert stride in _STRIDES
 
         middle_dim = middle_dim or int(round(input_dim * ratio))
         self.is_redisual = is_redisual
@@ -241,7 +241,7 @@ class _MobileNetV2(_MoblieNetHead):
         return_intermediate: bool,
     ) -> None:
         inverted_redisual_cfg = (
-            inverted_redisual_cfg if inverted_redisual_cfg else MOBILENET_V2_CFG
+            inverted_redisual_cfg if inverted_redisual_cfg else _MOBILENET_V2_CFG
         )
 
         super().__init__(
@@ -340,15 +340,15 @@ class _MobileNetV3(_MoblieNetHead):
     ) -> None:
         self.mode = None
         if not inverted_redisual_cfg:
-            inverted_redisual_cfg = MOBILENET_V3_CFG_LARGE
+            inverted_redisual_cfg = _MOBILENET_V3_CFG_LARGE
         elif isinstance(inverted_redisual_cfg, Dict):
             inverted_redisual_cfg = inverted_redisual_cfg
         elif isinstance(inverted_redisual_cfg, str):
             self.mode = inverted_redisual_cfg
             inverted_redisual_cfg = (
-                MOBILENET_V3_CFG_LARGE
+                _MOBILENET_V3_CFG_LARGE
                 if inverted_redisual_cfg == "large"
-                else MOBILENET_V3_CFG_SMALL
+                else _MOBILENET_V3_CFG_SMALL
             )
 
         super().__init__(
@@ -436,7 +436,7 @@ def mobilenetv2(input_dim: int, pretrained: bool, **kwargs):
     """
     model = _MobileNetV2(input_dim, **kwargs)
     if pretrained:
-        model.load_from(torch.load(PRETRAINED_MODELS.get("mobilenetv2")))
+        model.load_from(torch.load(_PRETRAINED_MODELS.get("mobilenetv2")))
     return model
 
 
@@ -463,7 +463,7 @@ def mobilenetv3_large(input_dim: int, pretrained: bool, **kwargs):
     assert kwargs["inverted_redisual_cfg"] == "large"
     model = mobilenetv3(input_dim, **kwargs)
     if pretrained:
-        model.load_from(torch.load(PRETRAINED_MODELS.get("mobilenetv3_large")))
+        model.load_from(torch.load(_PRETRAINED_MODELS.get("mobilenetv3_large")))
     return model
 
 
@@ -479,5 +479,5 @@ def mobilenetv3_small(input_dim: int, pretrained: bool, **kwargs):
     assert kwargs["inverted_redisual_cfg"] == "small"
     model = mobilenetv3(input_dim, **kwargs)
     if pretrained:
-        model.load_from(torch.load(PRETRAINED_MODELS.get("mobilenetv3_small")))
+        model.load_from(torch.load(_PRETRAINED_MODELS.get("mobilenetv3_small")))
     return model

@@ -8,16 +8,18 @@ import torch.nn.functional as F
 from ..modules.attention import BoT_MHSA
 from ..modules.base import BasicBlock, IntermediateSequential
 
-__all__ = ["resnet34", "resnet50", "resnet101"]
+__all__ = ["resnet34", "resnet50", "resnet101", "resnext50_32x4d", "resnext101_32x8d"]
 
 
-PRETRAINED_MODELS = {
+_PRETRAINED_MODELS = {
     "resnet34": "resources/checkpoints/resnet34-333f7ec4.pth",
     "resnet50": "resources/checkpoints/resnet50-19c8e357.pth",
     "resnet101": "resources/checkpoints/resnet101-5d3b4d8f.pth",
+    "resnext50_32x4d": "resources/checkpoints/resnext50_32x4d-7cdf4587.pth",
+    "resnext101_32x8d": "resources/checkpoints/resnext101_32x8d-8ba56ff5.pth",
 }
 
-STAGE_CFG = {
+_STAGE_CFG = {
     "n_layers": [3, 4, 6, 3],
     "strides": [1, 2, 2, 2],
     "dilations": [1, 1, 1, 1],
@@ -84,6 +86,9 @@ class RedisualBlock(nn.Module):
 
 
 class BottleNeck(RedisualBlock):
+    """
+    Reference: https://wangguisen.blog.csdn.net/article/details/126687997
+    """
 
     expansion = 4
 
@@ -94,6 +99,8 @@ class BottleNeck(RedisualBlock):
         middle_dim: int = None,
         stride: int = 1,
         dilation: int = 1,
+        groups: int = 1,
+        width_per_group: int = 64,
         is_identity: bool = False,
         reversed: bool = False,
         MHSA_CFG: Optional[Dict] = None,
@@ -102,6 +109,7 @@ class BottleNeck(RedisualBlock):
     ) -> None:
         super().__init__(input_dim, output_dim, stride, 1, 0, is_identity)
         middle_dim = middle_dim or output_dim
+        middle_dim = int(middle_dim * (width_per_group / 64.0)) * groups
         is_bias = not reversed
 
         if not MHSA_CFG:
@@ -111,6 +119,7 @@ class BottleNeck(RedisualBlock):
                 stride=stride,
                 padding=dilation,
                 dilation=dilation,
+                groups=groups,
                 is_bias=is_bias,
                 reversed=reversed,
                 init_type=init_type,
@@ -219,6 +228,8 @@ class _ResNet(IntermediateSequential):
                     "zero_init": self.zero_init and stride_idx == 0,
                 }
                 if self.block_type is BottleNeck:
+                    kwargs["groups"] = self.stage_cfg["groups"]
+                    kwargs["width_per_group"] = self.stage_cfg["width_per_group"]
                     kwargs["dilation"] = (
                         self.stage_cfg["dilations"][idx] * multi_grids[stride_idx]
                     )
@@ -304,23 +315,25 @@ def _resnet(
 ):
     model = _ResNet(block, input_dim, stage_cfg, **kwargs)
     if pretrained:
-        model.load_from(torch.load(PRETRAINED_MODELS.get(arch)))
+        model.load_from(torch.load(_PRETRAINED_MODELS.get(arch)))
     return model
 
 
 def _get_stage_cfg(n_layers: List[int], **kwargs):
-    stage_cfg = copy.deepcopy(STAGE_CFG)
+    stage_cfg = copy.deepcopy(_STAGE_CFG)
     stage_cfg["n_layers"] = n_layers
-    if kwargs["strides"]:
+    if "strides" in kwargs.keys() and kwargs["strides"]:
         stage_cfg["strides"] = kwargs.pop("strides")
-    if kwargs["dilations"]:
+    if "dilations" in kwargs.keys() and kwargs["dilations"]:
         stage_cfg["dilations"] = kwargs.pop("dilations")
+    stage_cfg["groups"] = kwargs.pop("groups", 1)
+    stage_cfg["width_per_group"] = kwargs.pop("width_per_group", 64)
     return stage_cfg, kwargs
 
 
 def resnet34(input_dim: int, pretrained: bool, **kwargs):
     return _resnet(
-        "resnet34", RedisualBlock, input_dim, STAGE_CFG, pretrained, **kwargs
+        "resnet34", RedisualBlock, input_dim, _STAGE_CFG, pretrained, **kwargs
     )
 
 
@@ -332,3 +345,21 @@ def resnet50(input_dim: int, pretrained: bool, **kwargs):
 def resnet101(input_dim: int, pretrained: bool, **kwargs):
     stage_cfg, kwargs = _get_stage_cfg([3, 4, 23, 3], **kwargs)
     return _resnet("resnet101", BottleNeck, input_dim, stage_cfg, pretrained, **kwargs)
+
+
+def resnext50_32x4d(input_dim: int, pretrained: bool, **kwargs):
+    stage_cfg, kwargs = _get_stage_cfg(
+        [3, 4, 6, 3], groups=32, width_per_group=4, **kwargs
+    )
+    return _resnet(
+        "resnext50_32x4d", BottleNeck, input_dim, stage_cfg, pretrained, **kwargs
+    )
+
+
+def resnext101_32x8d(input_dim: int, pretrained: bool, **kwargs):
+    stage_cfg, kwargs = _get_stage_cfg(
+        [3, 4, 23, 3], groups=32, width_per_group=8, **kwargs
+    )
+    return _resnet(
+        "resnext101_32x8d", BottleNeck, input_dim, stage_cfg, pretrained, **kwargs
+    )

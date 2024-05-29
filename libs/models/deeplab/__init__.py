@@ -11,8 +11,12 @@ from ._utils import (
     deeplabv3_plus_mobilenetv3_small,
     deeplabv3_plus_resnet50,
     deeplabv3_plus_resnet101,
+    deeplabv3_plus_resnext50_32x4d,
+    deeplabv3_plus_resnext101_32x8d,
     deeplabv3_plus_xception,
     deeplabv3_resnet50,
     deeplabv3_resnet101,
+    deeplabv3_resnext50_32x4d,
+    deeplabv3_resnext101_32x8d,
     deeplabv3_xception,
 )
