@@ -68,28 +68,38 @@ class BaseModule(LightningModule):
         # judge fit or test
         self.is_fit = True
 
-        # metric objects for calculating and averaging accuracy across batches
-        self.train_acc = C.BinaryAccuracy()
-        self.val_acc = C.BinaryAccuracy()
-
-        # metric objects for calculating and averaging IoU across batches
-        self.train_IoU = C.BinaryJaccardIndex()
-        self.val_IoU = C.BinaryJaccardIndex()
-
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
         self.test_loss = MeanMetric()
 
+        self.train_metrics = MetricCollection(
+            {
+                "acc": C.BinaryAccuracy(),
+                "IoU": C.BinaryJaccardIndex(),
+            },
+            prefix="train/",
+        )
+
+        self.val_metrics = MetricCollection(
+            {
+                "acc": C.BinaryAccuracy(),
+                "IoU": C.BinaryJaccardIndex(),
+            },
+            prefix="val/",
+        )
+
         self.test_metrics = MetricCollection(
-            C.BinaryAccuracy(),
-            C.BinaryPrecision(),
-            C.BinaryRecall(),
-            C.BinaryF1Score(),
-            C.BinarySpecificity(),
-            C.BinaryROC(),
-            C.BinaryAUROC(),
-            C.BinaryJaccardIndex(),
+            {
+                "Accuracy": C.BinaryAccuracy(),
+                "Precision": C.BinaryPrecision(),
+                "Recall": C.BinaryRecall(),
+                "F1-Score": C.BinaryF1Score(),
+                "Specificity": C.BinarySpecificity(),
+                "AUROC": C.BinaryAUROC(),
+                "IoU": C.BinaryJaccardIndex(),
+            },
+            prefix="test/",
         )
 
         # for tracking best so far validation accuracy
@@ -108,8 +118,7 @@ class BaseModule(LightningModule):
         # by default lightning executes validation step sanity checks before training starts,
         # so it's worth to make sure validation metrics don't store results from these checks
         self.val_loss.reset()
-        self.val_acc.reset()
-        self.val_IoU.reset()
+        self.val_metrics.reset()
         self.val_acc_best.reset()
 
     def model_step(
@@ -143,7 +152,7 @@ class BaseModule(LightningModule):
                 for output in outputs:
                     loss += self.criterion(output, y)
                 loss /= len(outputs)
-        return loss, pred, y
+        return loss, pred, y.int()
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -159,18 +168,13 @@ class BaseModule(LightningModule):
 
         # update and log metrics
         self.train_loss(loss)
-        self.train_acc(preds, targets)
-        self.train_IoU(preds, targets)
+        self.train_metrics(preds, targets)
 
         self.log(
             "train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True
         )
-        self.log(
-            "train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True
-        )
-        self.log(
-            "train/IoU", self.train_IoU, on_step=False, on_epoch=True, prog_bar=True
-        )
+        for name, metric in self.train_metrics.items():
+            self.log(name, metric, on_step=False, on_epoch=True, prog_bar=True)
 
         # return loss or backpropagation will fail
         return loss
@@ -192,16 +196,15 @@ class BaseModule(LightningModule):
 
         # update and log metrics
         self.val_loss(loss)
-        self.val_acc(preds, targets)
-        self.val_IoU(preds, targets)
+        self.val_metrics(preds, targets)
 
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/IoU", self.val_IoU, on_step=False, on_epoch=True, prog_bar=True)
+        for name, metric in self.val_metrics.items():
+            self.log(name, metric, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
-        acc = self.val_acc.compute()  # get current val acc
+        acc = self.val_metrics.compute().get("val/acc")  # get current val acc
         self.val_acc_best(acc)  # update best so far val acc
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch
@@ -226,16 +229,12 @@ class BaseModule(LightningModule):
         # update and log metrics
         self.test_loss(loss)
         self.test_metrics(preds, targets)
+
         self.log(
             "test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True
         )
-        self.log(
-            "test/metrics",
-            self.test_metrics,
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-        )
+        for name, metric in self.test_metrics.items():
+            self.log(name, metric, on_step=False, on_epoch=True, prog_bar=True)
 
     def on_test_epoch_end(self) -> None:
         """Lightning hook that is called when a test epoch ends."""

@@ -7,6 +7,7 @@ COPY requirements.txt requirements.txt
 COPY resources/sources.list /etc/apt/sources.list
 COPY resources/checkpoints/ /root/.cache/torch/hub/checkpoints/
 COPY resources/pydensecrf /workspace/pydensecrf
+COPY resources/.netrc  /root/.netrc
 
 
 RUN apt update && apt install -y libgl1-mesa-glx libglib2.0-dev

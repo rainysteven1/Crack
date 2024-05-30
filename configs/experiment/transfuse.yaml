@@ -13,7 +13,7 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "Transformer", "UNet", "TransFuse"]
+tags: ["Transformer", "UNet", "TransFuse"]
 
 seed: 42
 
@@ -29,7 +29,8 @@ callbacks:
 
 logger:
   wandb:
+    project: "Crack"
+    entity: "rainysteven_team"
+    log_model: true
     tags: ${tags}
     group: "crack"
-  aim:
-    experiment: "crack"

@@ -21,7 +21,7 @@ pytorch_msssim==1.0.0
 ml_collections==0.1.1
 
 # --------- loggers --------- #
-# wandb
+wandb==0.17.0
 # neptune-client
 # mlflow
 # comet-ml
