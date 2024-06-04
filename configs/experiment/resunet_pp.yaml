@@ -4,28 +4,28 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: crack
-  - override /model: net/transformer/transfuse/default
-  - override /model/net: transformer/transfuse/s16
+  - override /data: kvasir
+  - override /model: net/unet/resunet_pp
   - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["Transformer", "UNet", "TransFuse"]
+tags: ["UNet", "ResUNet"]
 
 seed: 42
 
 trainer:
-  min_epochs: 100
-  max_epochs: 100
+  min_epochs: 200
+  max_epochs: 200
 
 model:
   compile: false
 
 callbacks:
-  early_stopping: null
+  early_stopping:
+    patience: 10
 
 logger:
   wandb:
@@ -33,4 +33,6 @@ logger:
     entity: "rainysteven_team"
     log_model: false
     tags: ${tags}
-    group: "crack"
+    group: "kvasir"
+  aim:
+    experiment: "crack"

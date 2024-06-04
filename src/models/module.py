@@ -1,6 +1,7 @@
 from typing import Any, Dict, Tuple
 
 import torch
+import torch.nn.functional as F
 import torchmetrics.classification as C
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric, MetricCollection
@@ -144,7 +145,7 @@ class BaseModule(LightningModule):
                 loss = self.criterion(pred, y)
         else:
             if not isinstance(outputs, list):
-                pred = outputs
+                pred = F.sigmoid(outputs)
                 loss = self.criterion(pred, y)
             else:
                 pred = outputs[-1]

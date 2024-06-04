@@ -2,7 +2,7 @@ import os
 
 import albumentations as A
 
-from .components.dataset import CrackDataset
+from .components import CustomDataset
 from .data_module import BaseDataModule
 
 
@@ -66,12 +66,12 @@ class CrackDataModule(BaseDataModule):
             return set_list
 
         if self.trainer:
-            self.data_train = CrackDataset(
+            self.data_train = CustomDataset(
                 *path_list("train"), transform=self.train_transforms
             )
-            self.data_val = CrackDataset(
+            self.data_val = CustomDataset(
                 *path_list("validation"), transform=self.val_transforms
             )
-            self.data_test = CrackDataset(
+            self.data_test = CustomDataset(
                 *path_list("test"), transform=self.val_transforms
             )

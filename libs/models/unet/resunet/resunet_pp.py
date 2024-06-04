@@ -4,12 +4,12 @@ import torch
 import torch.nn as nn
 
 from ...backbone.resnet import RedisualBlock
-from ...modules.base import BasicBlock, OutputBlock, SqueezeExciteBlock
+from ...modules.base import BasicBlock, SqueezeExciteBlock
 from ...modules.pyramid import ASPP_v3
 
 __all__ = ["ResUNet2Plus"]
 
-kwargs = {"skip_kernel_size": 3, "skip_padding": 1, "is_bias": True, "reversed": False}
+kwargs = {"skip_kernel_size": 1, "skip_padding": 0, "is_bias": True, "reversed": False}
 
 
 class _AttentionBlock(nn.Module):
@@ -56,12 +56,12 @@ class _DecoderBlock(nn.Module):
 class ResUNet2Plus(nn.Module):
 
     layer_configurations = [16, 32, 64, 128, 256]
+    atrous_rates = [1, 6, 12, 18]
 
     def __init__(
         self, input_dim: int, output_dim: int, init_type: Optional[str] = None
     ) -> None:
         super().__init__()
-        atrous_rates = [1, 6, 12, 18]
         length = len(self.layer_configurations)
         kwargs.update({"init_type": init_type})
 
@@ -86,12 +86,11 @@ class ResUNet2Plus(nn.Module):
                 ASPP_v3(
                     self.layer_configurations[-2],
                     self.layer_configurations[-1],
-                    atrous_rates,
+                    self.atrous_rates,
                     init_type,
                 )
             ]
         )
-        kwargs.update({"skip_kernel_size": 1, "skip_padding": 0})
         self.decoder_blocks = nn.ModuleList(
             _DecoderBlock(
                 self.layer_configurations[i],
@@ -104,10 +103,18 @@ class ResUNet2Plus(nn.Module):
             ASPP_v3(
                 self.layer_configurations[1],
                 self.layer_configurations[0],
-                atrous_rates,
+                self.atrous_rates,
                 init_type,
             ),
-            OutputBlock(self.layer_configurations[0], output_dim, init_type=init_type),
+            BasicBlock(
+                self.layer_configurations[0],
+                output_dim,
+                kernel_size=1,
+                padding=0,
+                is_bn=False,
+                is_relu=False,
+                init_type=init_type,
+            ),
         )
 
     def forward(self, input: torch.Tensor):
