@@ -17,3 +17,13 @@ check_val_every_n_epoch: 1
 # set True to to ensure deterministic results
 # makes training slower but gives more reproducibility than just setting seeds
 deterministic: False
+
+# clip gradients' global norm to <=0.5 using gradient_clip_algorithm='norm' by default
+gradient_clip_val: 0.5
+gradient_clip_algorithm: norm
+
+# profiler: PytorchProfiler,AdvancedProfiler,SimpleProfiler
+profiler:
+  _target_: lightning.pytorch.profilers.SimpleProfiler
+  dirpath: ${paths.output_dir}
+  filename: "perf_logs"

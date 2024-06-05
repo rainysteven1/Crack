@@ -99,6 +99,10 @@ class BaseModule(LightningModule):
             },
             prefix="test/",
         )
+        self.test_curves = MetricCollection(
+            {"PR": C.BinaryPrecisionRecallCurve(), "ROC": C.BinaryROC()},
+            postfix="_Curve",
+        )
 
         # for tracking best so far validation accuracy
         self.val_acc_best = MaxMetric()
@@ -238,6 +242,7 @@ class BaseModule(LightningModule):
         # update and log metrics
         self.test_loss(loss)
         self.test_metrics(pred, target)
+        self.test_curves(pred, target)
 
         self.log(
             "test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True
@@ -259,7 +264,7 @@ class BaseModule(LightningModule):
         :param stage: Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
         """
         if self.hparams.compile and stage == "fit":
-            self.net = torch.compile(self.net)
+            self.net = torch.compile(self.net, fullgraph=True)
 
     def configure_optimizers(self) -> Dict[str, Any]:
         """Choose what optimizers and learning-rate schedulers to use in your

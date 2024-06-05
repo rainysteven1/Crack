@@ -50,8 +50,6 @@ class CrackDataModule(BaseDataModule):
                 self.data_train = self.hparams.dataset(
                     *path_list("train"), is_train=True
                 )
-                self.data_val = self.hparams.dataset(
-                    *path_list("validation"), is_resize=True
-                )
+                self.data_val = self.hparams.dataset(*path_list("validation"))
             if stage == "test" or stage is None:
                 self.data_test = self.hparams.dataset(*path_list("test"))
