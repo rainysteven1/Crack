@@ -1,7 +1,7 @@
 defaults:
   - net: null
 
-_target_: src.models.module.BaseModule
+_target_: src.models.BaseModule
 
 criterion:
   _target_: libs.utils.losses.StructureLoss
@@ -21,6 +21,8 @@ net:
   drop_rate: 0.2
   img_size: ${data.img_size}
   init_type: "kaiming"
+
+loss_weights: [0.2, 0.3, 0.5]
 
 # compile model for faster training with pytorch 2.0
 compile: false

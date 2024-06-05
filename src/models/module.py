@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -6,7 +6,7 @@ import torchmetrics.classification as C
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric, MetricCollection
 
-from libs.utils.losses import StructureLoss
+__all__ = ["BaseModule"]
 
 
 class BaseModule(LightningModule):
@@ -44,6 +44,7 @@ class BaseModule(LightningModule):
         self,
         net: torch.nn.Module,
         criterion: torch.nn.Module,
+        loss_weights: Optional[List[float]],
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler,
         compile: bool,
@@ -64,10 +65,6 @@ class BaseModule(LightningModule):
 
         # loss function
         self.criterion = criterion
-        self.is_structure_loss = isinstance(criterion, StructureLoss)
-
-        # judge fit or test
-        self.is_fit = True
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
@@ -123,7 +120,7 @@ class BaseModule(LightningModule):
         self.val_acc_best.reset()
 
     def model_step(
-        self, batch: Tuple[torch.Tensor, torch.Tensor]
+        self, batch: Tuple
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Perform a single model step on a batch of data.
 
@@ -134,26 +131,36 @@ class BaseModule(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-        x, y = batch
-        outputs = self.forward(x)
-        if self.is_structure_loss:
-            pred = outputs[-1]
-            if self.is_fit:
-                losses = [self.criterion(output, y) for output in outputs]
-                loss = 0.5 * losses[2] + 0.3 * losses[1] + 0.2 * losses[0]
-            else:
-                loss = self.criterion(pred, y)
+        length = len(batch)
+        logits = self.forward(batch[0])
+        if not isinstance(logits, (list, tuple)):
+            pred = F.sigmoid(logits)
+            loss = self.criterion(pred, batch[1])
         else:
-            if not isinstance(outputs, list):
-                pred = F.sigmoid(outputs)
-                loss = self.criterion(pred, y)
+            preds = list(map(F.sigmoid, logits))
+            pred = preds[-1]
+            if self.is_train:
+                if length == 2:
+                    losses = [self.criterion(pred, batch[1]) for pred in preds]
+                else:
+                    assert len(preds) == length - 1
+                    losses = [
+                        self.criterion(pred, target)
+                        for pred, target in zip(reversed(preds), batch[1:])
+                    ]
+
+                assert self.hparams.loss_weights and len(losses) == len(
+                    self.hparams.loss_weights
+                )
+                loss = sum(
+                    [
+                        loss * weight
+                        for loss, weight in zip(losses, self.hparams.loss_weights)
+                    ]
+                )
             else:
-                pred = outputs[-1]
-                loss = 0
-                for output in outputs:
-                    loss += self.criterion(output, y)
-                loss /= len(outputs)
-        return loss, pred, y.int()
+                loss = self.criterion(pred, batch[1])
+        return loss, pred, batch[1].int()
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -165,11 +172,11 @@ class BaseModule(LightningModule):
         :param batch_idx: The index of the current batch.
         :return: A tensor of losses between model predictions and targets.
         """
-        loss, preds, targets = self.model_step(batch)
+        loss, pred, target = self.model_step(batch)
 
         # update and log metrics
         self.train_loss(loss)
-        self.train_metrics(preds, targets)
+        self.train_metrics(pred, target)
 
         self.log(
             "train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True
@@ -184,6 +191,9 @@ class BaseModule(LightningModule):
         "Lightning hook that is called when a training epoch ends."
         pass
 
+    def on_validation_start(self) -> None:
+        self.is_train = False
+
     def validation_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
     ) -> None:
@@ -193,11 +203,11 @@ class BaseModule(LightningModule):
             and target labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
+        loss, pred, target = self.model_step(batch)
 
         # update and log metrics
         self.val_loss(loss)
-        self.val_metrics(preds, targets)
+        self.val_metrics(pred, target)
 
         self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
         for name, metric in self.val_metrics.items():
@@ -205,6 +215,7 @@ class BaseModule(LightningModule):
 
     def on_validation_epoch_end(self) -> None:
         "Lightning hook that is called when a validation epoch ends."
+        self.is_train = False
         acc = self.val_metrics.compute().get("val/acc")  # get current val acc
         self.val_acc_best(acc)  # update best so far val acc
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
@@ -212,9 +223,6 @@ class BaseModule(LightningModule):
         self.log(
             "val/acc_best", self.val_acc_best.compute(), sync_dist=True, prog_bar=True
         )
-
-    def on_fit_end(self) -> None:
-        self.is_fit = False
 
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -225,11 +233,11 @@ class BaseModule(LightningModule):
             and target labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
+        loss, pred, target = self.model_step(batch)
 
         # update and log metrics
         self.test_loss(loss)
-        self.test_metrics(preds, targets)
+        self.test_metrics(pred, target)
 
         self.log(
             "test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True

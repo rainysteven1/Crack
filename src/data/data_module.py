@@ -4,6 +4,8 @@ from lightning import LightningDataModule
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.utils.data import DataLoader, Dataset
 
+__all__ = ["BaseDataModule"]
+
 
 class BaseDataModule(LightningDataModule):
     """`LightningDataModule` for the Crack500 dataset.

@@ -1,16 +1,20 @@
 import os
+from typing import Optional
 
-import albumentations as A
+from torch.utils.data import Dataset
 
 from .components import CustomDataset
+from .components.crack_dataset import CrackDataset
 from .data_module import BaseDataModule
+
+__all__ = ["CrackDataModule"]
 
 
 class CrackDataModule(BaseDataModule):
     def __init__(
         self,
         data_dir: str,
-        img_size: int,
+        dataset: Dataset,
         train_batch_size: int,
         test_batch_size: int,
         num_workers: int,
@@ -26,32 +30,8 @@ class CrackDataModule(BaseDataModule):
         )
 
         self.save_hyperparameters(logger=False)
-        # data transformations
-        self.train_transforms = A.Compose(
-            [
-                A.Resize(img_size, img_size),
-                A.Flip(p=0.7),
-                A.Rotate(p=0.7),
-                A.OneOf(
-                    [A.RandomBrightnessContrast(), A.RandomGamma()],
-                    p=0.3,
-                ),
-                A.OneOf(
-                    [
-                        A.ElasticTransform(
-                            alpha=120, sigma=120 * 0.05, alpha_affine=120 * 0.03
-                        ),
-                        A.GridDistortion(),
-                        A.OpticalDistortion(distort_limit=2, shift_limit=0.5),
-                    ],
-                    p=0.3,
-                ),
-                A.Normalize(),
-            ]
-        )
-        self.val_transforms = A.Compose([A.Resize(img_size, img_size), A.Normalize()])
 
-    def setup(self, stage=None):
+    def setup(self, stage: Optional[str] = None):
         def path_list(category):
             set_list = list()
             dir_list = ["image", "groundtruth"]
@@ -66,12 +46,12 @@ class CrackDataModule(BaseDataModule):
             return set_list
 
         if self.trainer:
-            self.data_train = CustomDataset(
-                *path_list("train"), transform=self.train_transforms
-            )
-            self.data_val = CustomDataset(
-                *path_list("validation"), transform=self.val_transforms
-            )
-            self.data_test = CustomDataset(
-                *path_list("test"), transform=self.val_transforms
-            )
+            if stage == "fit" or stage is None:
+                self.data_train = self.hparams.dataset(
+                    *path_list("train"), is_train=True
+                )
+                self.data_val = self.hparams.dataset(
+                    *path_list("validation"), is_resize=True
+                )
+            if stage == "test" or stage is None:
+                self.data_test = self.hparams.dataset(*path_list("test"))
