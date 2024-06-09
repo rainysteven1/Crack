@@ -5,15 +5,15 @@
 
 defaults:
   - override /data: crack
-  - override /model: net/transformer/transunet
-  - override /model/net: transformer/vit/r50_b16
+  - override /model: net/transformer/transunet/default
+  - override /model/net: transformer/transunet/b16
   - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "Transformer", "UNet", "TransUNet"]
+tags: ["Transformer", "UNet", "TransUNet"]
 
 seed: 42
 

@@ -20,6 +20,7 @@ class CrackDataModule(BaseDataModule):
         num_workers: int,
         pin_memory: bool,
         persistent_workers: bool,
+        **kwargs,
     ):
         super().__init__(
             train_batch_size,

@@ -1,7 +1,25 @@
+from typing import List, Optional
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_msssim import MS_SSIM
+
+DEFAULT_CLASS_WEIGHTS = [0.04, 0.96]
+
+__all__ = [
+    "DiceLoss",
+    "DiceBCELoss",
+    "FocalLoss",
+    "IoULoss",
+    "HybridLoss",
+    "StructureLoss",
+]
+
+
+def _dice_loss(y_pred: torch.Tensor, y_true: torch.Tensor, smooth: float = 1e-5):
+    intersection = (y_pred * y_true).sum()
+    return 1 - (2.0 * intersection + smooth) / (y_pred.sum() + y_true.sum() + smooth)
 
 
 class DiceLoss(nn.Module):
@@ -10,22 +28,36 @@ class DiceLoss(nn.Module):
         self.smooth = smooth
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        N = y_true.size(0)
-        pred = y_pred.view(N, -1)
-        target = y_true.view(N, -1)
-
-        intersection = (pred * target).sum(dim=1)
-        union = pred.sum(dim=1) + target.sum(dim=1)
-
-        return 1 - ((2 * intersection + self.smooth) / (union + self.smooth)).sum() / N
+        y_pred = y_pred.view(-1)
+        y_true = y_true.view(-1)
+        return _dice_loss(y_pred, y_true, self.smooth)
 
 
-class BCEDiceLoss(DiceLoss):
-    def __init__(self, smooth: float = 1e-5):
-        super().__init__(smooth)
+class DiceBCELoss(nn.Module):
+
+    def __init__(
+        self,
+        loss_weights: Optional[List[float]],
+        class_weights: Optional[List[float]],
+        smooth: float = 1e-5,
+    ):
+        super().__init__()
+        self.loss_weights = loss_weights if loss_weights else [1, 1]
+        self.class_weights = class_weights if class_weights else DEFAULT_CLASS_WEIGHTS
+        self.smooth = smooth
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        return super().forward(y_pred, y_true) + nn.BCELoss()(y_pred, y_true)
+        y_pred = y_pred.view(-1)
+        y_true = y_true.view(-1)
+
+        weights = torch.zeros_like(y_true)
+        weights = torch.fill_(weights, 0.04)
+        weights[y_true > 0] = 0.96
+
+        BCE = F.binary_cross_entropy(y_pred, y_true, reduction="mean", weight=weights)
+        return self.loss_weights[0] * BCE + self.loss_weights[1] * _dice_loss(
+            y_pred, y_true, self.smooth
+        )
 
 
 class IoULoss(nn.Module):
@@ -42,12 +74,19 @@ class IoULoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha: float = 0.5, gamma: float = 2):
+    def __init__(
+        self, class_weights: Optional[List[float]], alpha: float = 0.5, gamma: float = 2
+    ):
         super().__init__()
+        self.class_weights = class_weights if class_weights else DEFAULT_CLASS_WEIGHTS
         self.alpha = alpha
         self.gamma = gamma
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        weights = torch.zeros_like(y_true)
+        weights = torch.fill_(weights, self.class_weights[0])
+        weights[y_true > 0] = self.class_weights[1]
+
         bce_loss = F.binary_cross_entropy(y_pred, y_true, reduction="mean")
         bce_exp = torch.exp(-bce_loss)
         return self.alpha * (1.0 - bce_exp) ** self.gamma * bce_loss

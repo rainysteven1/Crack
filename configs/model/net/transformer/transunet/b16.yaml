@@ -1,0 +1,17 @@
+defaults:
+  - /model/net/transformer/vit/b16@_here_
+  - /model/net/transformer/vit/pretrained/torchvision@_here_
+
+config:
+  pretrained:
+    path: ./resources/checkpoints/vit_b_16-c867db91.pth
+
+  patch_embedding:
+    img_size: ${data.dataset.img_size}
+    is_cls: false
+
+  decoder:
+    embedding_dim: ${model.net.config.shared_params.embedding_dim}
+    decoder_dims: [256, 128, 64, 16]
+    n_skips: null
+    skip_dims: null

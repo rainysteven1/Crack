@@ -1,6 +1,8 @@
 _target_: src.data.CrackDataModule
 data_dir: ${paths.data_dir}/crack500
 
+class_weights: [0.06647518381057083, 0.9999999983956792]
+
 dataset:
   _target_: src.data.components.CrackDataset
   _partial_: true

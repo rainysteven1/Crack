@@ -1,0 +1,15 @@
+config:
+  pretrained:
+    path: null
+    source: jax
+    weights_keys:
+      cls_token: cls_token
+      pos_embedding: pos_embed
+      encoder_norm: norm
+      encoder_block:
+        root: "blocks.{0}.{{}}.{1}"
+        norm: "norm{}"
+        qkv: attn.qkv
+        fn:
+          proj: attn.proj
+          mlp: "mlp.fc{}"

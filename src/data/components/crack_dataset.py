@@ -4,9 +4,8 @@ import albumentations as A
 import cv2
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.transforms import v2
+from torchvision.transforms import transforms
 
 channel_means = [0.598, 0.584, 0.565]
 channel_stds = [0.104, 0.103, 0.103]
@@ -33,11 +32,11 @@ def _bextraction(img):
 
 class _ImgToTensor:
     def __call__(self, img: np.ndarray):
-        tf = v2.Compose(
+        tf = transforms.Compose(
             [
-                v2.ToImageTensor(),
-                v2.ConvertImageDtype(),
-                v2.Normalize(mean=channel_means, std=channel_stds),
+                transforms.ToPILImage(),
+                transforms.ToTensor(),
+                transforms.Normalize(channel_means, channel_stds),
             ]
         )
         return tf(img)
@@ -101,7 +100,7 @@ class CrackDataset(Dataset):
                 mask = transformed["mask"]
 
         _, mask = cv2.threshold(mask, 127, 1, cv2.THRESH_BINARY)
-        img = self.img_totensor(Image.fromarray(img.copy()))
+        img = self.img_totensor(img.copy())
         mask = self.mask_totensor(mask.copy()).unsqueeze(0)
 
         if self.is_train and self.is_boundary:

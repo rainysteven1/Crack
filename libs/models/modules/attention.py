@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange
 
 from .base import BasicBlock
 
@@ -32,6 +33,39 @@ class AttentionBlock(nn.Module):
 
 
 class MHSA(nn.Module):
+    """Multi-Head Self-Attention module."""
+
+    def __init__(
+        self, input_dim: int, n_heads: int, qkv_bias: bool, dropout: float
+    ) -> None:
+        super().__init__()
+        self.n_heads = n_heads
+        self.scale = input_dim**-0.5
+
+        self.qkv = nn.Linear(input_dim, input_dim * 3, bias=qkv_bias)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, input: torch.Tensor, mask: Optional[torch.Tensor] = None):
+        qkv = rearrange(
+            self.qkv(input), "b n (h d qkv) -> (qkv) b h n d", h=self.n_heads, qkv=3
+        )
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
+        energy = torch.einsum(
+            "bhqd, bhkd -> bhqk", q, k
+        )  # batch, num_heads, query_len, key_len
+        if mask is not None:
+            fill_value = torch.finfo(torch.float32).min
+            energy.mask_fill(~mask, fill_value)
+        attn = F.softmax(energy * self.scale, dim=-1)
+        attn = self.dropout(attn)
+
+        output = torch.einsum("bhal, bhlv -> bhav", attn, v)
+        output = rearrange(output, "b h n d -> b n (h d)")
+        return output
+
+
+class _MHSA(nn.Module):
     """Multi-Head Self-Attention module."""
 
     def __init__(self, input_dim: int, n_heads: int = 4) -> None:
@@ -75,7 +109,7 @@ class MHSA(nn.Module):
         return self._transpose_context_scores(self._self_attention(input))
 
 
-class BoT_MHSA(MHSA):
+class BoT_MHSA(_MHSA):
     """
     Bottleneck Transformers Multi-Head Self-Attention module
     reference: https://github.com/leaderj1001/BottleneckTransformers/blob/main/model.py

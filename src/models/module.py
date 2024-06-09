@@ -44,10 +44,10 @@ class BaseModule(LightningModule):
         self,
         net: torch.nn.Module,
         criterion: torch.nn.Module,
-        loss_weights: Optional[List[float]],
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler,
         compile: bool,
+        loss_weights: Optional[List[float]] = None,
     ) -> None:
         """Initialize a `LitModule`.
 
@@ -138,19 +138,18 @@ class BaseModule(LightningModule):
         length = len(batch)
         logits = self.forward(batch[0])
         if not isinstance(logits, (list, tuple)):
-            pred = F.sigmoid(logits)
-            loss = self.criterion(pred, batch[1])
+            pred = logits
+            loss = self.criterion(logits, batch[1])
         else:
-            preds = list(map(F.sigmoid, logits))
-            pred = preds[-1]
+            pred = logits[-1]
             if self.is_train:
                 if length == 2:
-                    losses = [self.criterion(pred, batch[1]) for pred in preds]
+                    losses = [self.criterion(logit, batch[1]) for logit in logits]
                 else:
-                    assert len(preds) == length - 1
+                    assert len(logits) == length - 1
                     losses = [
-                        self.criterion(pred, target)
-                        for pred, target in zip(reversed(preds), batch[1:])
+                        self.criterion(logit, target)
+                        for logit, target in zip(reversed(logits), batch[1:])
                     ]
 
                 assert self.hparams.loss_weights and len(losses) == len(

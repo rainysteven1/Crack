@@ -1,17 +1,26 @@
 config:
-  patch_size: 16
-  patches:
-    size: [16, 16]
-  hidden_size: 768
+  shared_params:
+    embedding_dim: 768
 
-  transformer:
-    pretrained_path: ${paths.resources_dir}/checkpoints/ViT-B_16.npz
-    mlp_dim: 3072
+  pretrained: null
+
+  patch_embedding:
+    img_size: 224
+    patch_size: 16
+    embedding_dim: ${model.net.config.shared_params.embedding_dim}
+    is_cls: true
+    dropout: 0.1
+
+  encoder:
+    n_blocks: 12
+    return_intermediate: false
+    is_norm: true
+
+  encoder_block:
+    embedding_dim: ${model.net.config.shared_params.embedding_dim}
     n_heads: 12
-    n_layers: 12
-    attn_dropout_rate: 0.0
-    dropout_rate: 0.1
-
-  decoder_channels: [256, 128, 64, 16]
-  n_classes: 1
-  n_skip: 0
+    qkv_bias: false
+    attn_dropout: 0.0
+    proj_dropout: 0.1
+    mlp_dim: 3072
+    mlp_dropout: 0.1
