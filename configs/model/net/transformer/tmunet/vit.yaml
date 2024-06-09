@@ -1,0 +1,22 @@
+defaults:
+  - /model/net/transformer/vit/b16@_here_
+
+config:
+  shared_params:
+    embedding_dim: 512
+
+  patch_embedding:
+    img_size: ${data.dataset.img_size}
+    embedding_dim: 512
+    dropout: null
+
+  encoder:
+    n_blocks: 4
+    is_norm: false
+
+  encoder_block:
+    embedding_dim: ${model.net.config.patch_embedding.embedding_dim}
+    n_heads: 8
+    qkv_bias: true
+    proj_dropout: 0.0
+    mlp_dropout: 0.0

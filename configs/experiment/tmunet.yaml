@@ -1,0 +1,39 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: crack
+  - override /model: net/transformer/tmunet/default
+  - override /model/net: transformer/tmunet/vit
+  - override /callbacks: default
+  - override /trainer: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["Transformer", "UNet", "TMUNet"]
+
+seed: 42
+
+data:
+  train_batch_size: 4
+
+trainer:
+  min_epochs: 100
+  max_epochs: 100
+
+model:
+  compile: false
+
+callbacks:
+  early_stopping: null
+
+logger:
+  wandb:
+    project: "Crack"
+    entity: "rainysteven_team"
+    log_model: false
+    tags: ${tags}
+    group: "crack"

@@ -1,0 +1,29 @@
+defaults:
+  - net: null
+
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: torch.nn.BCELoss
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 1.0e-4
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.5
+  patience: 10
+
+net:
+  _target_: libs.models.unet.transformer.tmunet.TMUNet
+  input_dim: 3
+  output_dim: 1
+
+loss_weights: null
+
+# compile model for faster training with pytorch 2.0
+compile: false
