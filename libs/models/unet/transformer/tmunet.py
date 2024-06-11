@@ -74,7 +74,12 @@ class _EncoderPatch(nn.Sequential):
 
 class _PatchProjection(nn.Sequential):
     def __init__(
-        self, input_dim: int, embedding_dim: int, patch_size: int, n_patch: int
+        self,
+        input_dim: int,
+        embedding_dim: int,
+        patch_size: int,
+        n_patches: int,
+        _: bool,
     ) -> None:
         super().__init__(
             Rearrange(
@@ -82,29 +87,24 @@ class _PatchProjection(nn.Sequential):
                 c=input_dim,
                 h=patch_size,
                 w=patch_size,
-                ph=n_patch,
-                pw=n_patch,
+                ph=n_patches,
+                pw=n_patches,
             ),
             Rearrange("b c p h w -> (b p) c h w"),
             _EncoderPatch(input_dim, embedding_dim),
-            Rearrange("(b p) d -> b p d", p=n_patch**2),
+            Rearrange("(b p) d -> b p d", p=n_patches**2),
         )
 
 
 class _DependencyMap(nn.Module):
 
-    def __init__(
-        self,
-        output_dim: int,
-        embedding_dim: int,
-        img_size: int,
-        patch_size: int,
-        is_cls: bool,
-    ) -> None:
+    def __init__(self, output_dim: int, config: DictConfig) -> None:
         super().__init__()
+        embedding_dim = config.get("embedding_dim")
+        patch_size = config.get("patch_size")
         self.patch_size = patch_size
-        self.n_patch = img_size // patch_size
-        self.is_cls = is_cls
+        self.n_patch = config.get("img_size") // patch_size
+        self.is_cls = config.get("is_cls")
 
         self.gpool = nn.AdaptiveAvgPool1d(1)
         self.output_block1 = nn.Sequential(
@@ -181,9 +181,8 @@ class TMUNet(nn.Module):
         del decoder_dims[0]
 
         self.transformer = VisionTransformer(input_dim, config, _PatchProjection)
-        del config["patch_embedding"]["dropout"]
         self.dependency_map = _DependencyMap(
-            decoder_dims[0], **config.get("patch_embedding")
+            decoder_dims[0], config.get("patch_embedding")
         )
 
         self.boundary = nn.Sequential(
@@ -196,7 +195,7 @@ class TMUNet(nn.Module):
         self.output_block = OutputBlock(2 * decoder_dims[0], output_dim)
 
     def forward(self, input: torch.Tensor):
-        x = self.transformer(input)
+        x, _ = self.transformer(input)
         global_contexual, regional_distribution, _ = self.dependency_map(x)
 
         x_list = list()

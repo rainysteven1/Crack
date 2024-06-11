@@ -9,7 +9,6 @@ from omegaconf import DictConfig
 from scipy import ndimage
 
 from ...utils.utils import np2th
-from ..backbone.vit_resnet import ResNet
 from ..modules.attention import MHSA
 from ..modules.base import IntermediateSequential
 
