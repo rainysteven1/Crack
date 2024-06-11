@@ -1,16 +1,26 @@
 defaults:
   - /model/net/transformer/vit/b16@_here_
+  - /model/net/transformer/vit/pretrained/timm@_here_
 
 config:
-  hidden_size: 384
+  shared_params:
+    embedding_dim: 384
 
-  transformer:
-    pretrained_path: ${paths.resources_dir}/checkpoints/ViT-S_16.npz
-    mlp_dim: 1536
+  pretrained:
+    path: ${paths.checkpoints_dir}/deit_small_patch16_224-cd65a155.pth
+
+  patch_embedding:
+    img_size: ${data.dataset.img_size}
+
+  encoder:
+    n_blocks: 8
+
+  encoder_block:
     n_heads: 6
-    n_layers: 8
 
-  resnet:
-    type: resnet34
-    pretrained_path: ${paths.resources_dir}/checkpoints/resnet34-333f7ec4.pth
-    dims: [256, 128, 64]
+backbone_config:
+  backbone:
+    _target_: libs.models.backbone.resnet.resnet34
+    input_dim: ${model.net.input_dim}
+    pretrained: true
+  dims: [256, 128, 64]

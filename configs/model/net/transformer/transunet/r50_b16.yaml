@@ -7,9 +7,11 @@ config:
 
   patch_embedding:
     backbone_config:
+      hybrid_backbone:
+        _target_: libs.models.backbone.vit_resnet.ResNet
+        _partial_: true
       grid_size: 16
       ratio: 1
-      stage_cfg: null
 
   decoder:
     skip_dims: [512, 256, 64, 16]

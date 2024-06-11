@@ -104,7 +104,7 @@ class ResNet(nn.Module):
         self,
         input_dim: int,
         ratio: float,
-        stage_cfg: Optional[Dict[str, List[int]]],
+        stage_cfg: Optional[Dict[str, List[int]]] = None,
     ) -> None:
         super().__init__()
         self.width = int(self.dim * ratio)

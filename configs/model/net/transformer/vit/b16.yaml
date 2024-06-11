@@ -1,6 +1,7 @@
 config:
   shared_params:
     embedding_dim: 768
+    dropout: 0.0
 
   pretrained: null
 
@@ -10,7 +11,7 @@ config:
     embedding_dim: ${model.net.config.shared_params.embedding_dim}
     backbone_config: null
     is_cls: true
-    dropout: 0.1
+    dropout: ${model.net.config.shared_params.dropout}
 
   encoder:
     n_blocks: 12
@@ -20,8 +21,8 @@ config:
   encoder_block:
     embedding_dim: ${model.net.config.shared_params.embedding_dim}
     n_heads: 12
-    qkv_bias: false
+    qkv_bias: true
     attn_dropout: 0.0
-    proj_dropout: 0.1
-    mlp_dim: 3072
-    mlp_dropout: 0.1
+    proj_dropout: ${model.net.config.shared_params.dropout}
+    mlp_ratio: 4
+    mlp_dropout: ${model.net.config.shared_params.dropout}

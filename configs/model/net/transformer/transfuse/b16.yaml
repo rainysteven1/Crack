@@ -1,8 +1,17 @@
 defaults:
   - /model/net/transformer/vit/b16@_here_
+  - /model/net/transformer/vit/pretrained/timm@_here_
 
 config:
-  resnet:
-    type: resnet50
-    pretrained_path: ${paths.resources_dir}/checkpoints/resnet50-19c8e357.pth
-    dims: [1024, 512, 256]
+  pretrained:
+    path: ${paths.checkpoints_dir}/deit_base_patch16_224-b5f2ef4d.pth
+
+  patch_embedding:
+    img_size: ${data.dataset.img_size}
+
+backbone_config:
+  backbone:
+    _target_: libs.models.backbone.resnet.resnet50
+    input_dim: ${model.net.input_dim}
+    pretrained: true
+  dims: [1024, 512, 256]

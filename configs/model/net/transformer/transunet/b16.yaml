@@ -3,6 +3,9 @@ defaults:
   - /model/net/transformer/vit/pretrained/timm@_here_
 
 config:
+  shared_params:
+    dropout: 0.1
+
   pretrained:
     path: ${paths.checkpoints_dir}/jx_vit_base_patch16_224_in21k-e5005f0a.pth
 
@@ -13,5 +16,3 @@ config:
   decoder:
     embedding_dim: ${model.net.config.shared_params.embedding_dim}
     decoder_dims: [256, 128, 64, 16]
-    n_skips: null
-    skip_dims: null

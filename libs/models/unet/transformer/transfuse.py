@@ -1,20 +1,21 @@
-import math
-from typing import Optional
+from typing import List, Optional, OrderedDict
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange
 from omegaconf import DictConfig
 
-from ...backbone.resnet import BottleNeck, resnet34, resnet50
+from ...backbone import resnet
 from ...modules.attention import AttentionBlock
 from ...modules.base import BasicBlock
 from ...transformer.vit import VisionTransformer
 
+__all__ = ["TransFuse"]
+
 
 class _ChannelPool(nn.Module):
-    def forward(self, input):
+    def forward(self, input: torch.Tensor):
         return torch.cat(
             [torch.max(input, 1)[0].unsqueeze(1), torch.mean(input, 1).unsqueeze(1)],
             dim=1,
@@ -93,7 +94,7 @@ class _BiFusionBlock(nn.Module):
         )
 
         is_identity = ch_dim1 + ch_dim2 + input_dim == output_dim
-        self.redisual = BottleNeck(
+        self.redisual = resnet.BottleNeck(
             ch_dim1 + ch_dim2 + input_dim,
             output_dim // 4,
             output_dim // 2,
@@ -128,8 +129,8 @@ class _UpsampleBlock(nn.Module):
         input_dim1: int,
         input_dim2: int,
         output_dim: int,
+        is_attn: bool,
         init_type: Optional[str],
-        is_attn: bool = False,
     ) -> None:
         super().__init__()
         self.is_attn = is_attn
@@ -150,7 +151,7 @@ class _UpsampleBlock(nn.Module):
         )
         self.attn_block = AttentionBlock(input_dim1, input_dim2, output_dim)
 
-    def forward(self, input1: torch.Tensor, input2: torch.Tensor = None):
+    def forward(self, input1: torch.Tensor, input2: Optional[torch.Tensor] = None):
         x1 = self.up_block(input1)
         x2 = input2
 
@@ -169,6 +170,23 @@ class _UpsampleBlock(nn.Module):
         return output
 
 
+def _final_common(
+    dims: List[int], output_dim: int, ratio: int, init_type: Optional[str]
+):
+    return nn.Sequential(
+        BasicBlock(dims[2], dims[2], init_type=init_type),
+        BasicBlock(
+            dims[2],
+            output_dim,
+            is_bn=False,
+            is_relu=False,
+            init_type=init_type,
+        ),
+        nn.Upsample(scale_factor=ratio, mode="bilinear", align_corners=True),
+        nn.Sigmoid(),
+    )
+
+
 class TransFuse(nn.Module):
 
     def __init__(
@@ -176,110 +194,97 @@ class TransFuse(nn.Module):
         input_dim: int,
         output_dim: int,
         drop_rate: int,
-        img_size: int,
+        backbone_config: DictConfig,
         config: DictConfig,
         init_type: Optional[str],
     ) -> None:
         super().__init__()
-        self.config = config
-        dims = config.resnet.dims
+        dims = backbone_config.get("dims")
+        embedding_dim = config.get("shared_params").get("embedding_dim")
+        self.patch_size = config.get("patch_embedding").get("patch_size")
 
-        self.transformer = VisionTransformer(input_dim, img_size, config)
-        self.resnet = (
-            resnet34(input_dim, pretrained=True)
-            if config.resnet.type == "resnet34"
-            else resnet50(
-                input_dim,
-                pretrained=True,
-                MHSA_cfg=dict([("img_size", img_size), ("n_heads", 4)]),
-            )
-        )
-        self.layers = list(self.resnet.children())
+        self.resnet = backbone_config.get("backbone")
+        self.transformer = VisionTransformer(input_dim, config)
+        self.resnet_blocks = list(self.resnet.children())
 
-        hidden_size = config["hidden_size"]
-        self.up_block1 = _UpsampleBlock(hidden_size, 0, dims[1], init_type)
-        self.up_block2 = _UpsampleBlock(dims[1], 0, dims[2], init_type)
+        self.dropout = nn.Dropout(2 * drop_rate)
+        self.up_blocks = nn.ModuleList(
+            [
+                _UpsampleBlock(embedding_dim, 0, dims[1], False, init_type),
+                _UpsampleBlock(dims[1], 0, dims[2], False, init_type),
+            ]
+        )
 
-        self.bifusion = _BiFusionBlock(
-            dims[0], hidden_size, 4, dims[0], dims[0], drop_rate / 2, init_type
+        self.bifusion_blocks = nn.ModuleList(
+            [
+                nn.ModuleList(
+                    [
+                        _BiFusionBlock(
+                            dims[i],
+                            embedding_dim if i == 0 else dims[i],
+                            4 // (2**i),
+                            dims[i],
+                            dims[i],
+                            drop_rate,
+                            init_type,
+                        ),
+                        (
+                            nn.Identity()
+                            if i == 0
+                            else _UpsampleBlock(
+                                dims[i - 1], dims[i], dims[i], True, init_type
+                            )
+                        ),
+                    ]
+                )
+                for i in range(len(self.up_blocks) + 1)
+            ]
         )
-        self.bifusion1 = _BiFusionBlock(
-            dims[1], dims[1], 2, dims[1], dims[1], drop_rate / 2, init_type
-        )
-        self.bifusion1_up = _UpsampleBlock(dims[0], dims[1], dims[1], True, init_type)
-        self.bifusion2 = _BiFusionBlock(
-            dims[2], dims[2], 1, dims[2], dims[2], drop_rate / 2, init_type
-        )
-        self.bifusion2_up = _UpsampleBlock(dims[1], dims[2], dims[2], True, init_type)
-
-        def final_common(ratio: int):
-            return nn.Sequential(
-                BasicBlock(dims[2], dims[2], init_type=init_type),
-                BasicBlock(
-                    dims[2],
-                    output_dim,
-                    is_bn=False,
-                    is_relu=False,
-                    init_type=init_type,
-                ),
-                nn.Upsample(scale_factor=ratio, mode="bilinear", align_corners=True),
-                nn.Sigmoid(),
-            )
 
         self.final_x = nn.Sequential(
             BasicBlock(dims[0], dims[2], kernel_size=1, padding=0, init_type=init_type),
-            final_common(16),
+            _final_common(dims, output_dim, 16, init_type),
         )
-        self.final_1 = final_common(4)
-        self.final_2 = final_common(4)
-
-        self.drop = nn.Dropout2d(drop_rate)
-
-        self._load_from()
+        self.final_1 = _final_common(dims, output_dim, 4, init_type)
+        self.final_2 = _final_common(dims, output_dim, 4, init_type)
 
     def forward(self, input: torch.Tensor):
         # transformer
         x_t = self.transformer(input)
-        if isinstance(x_t, tuple):
-            x_t = x_t[0]
-        x_t = self._reshape_input(x_t.squeeze())
-        x_t = self.drop(x_t)
-
-        x_t_1 = self.drop(self.up_block1(x_t))
-        x_t_2 = self.drop(self.up_block2(x_t_1))
+        x_t = self.dropout(
+            rearrange(
+                x_t[0][:, 1:],
+                "b (h w) d -> b d h w",
+                h=self.patch_size,
+                w=self.patch_size,
+            )
+        )
+        x_t_list = [x_t]
+        for up_block in self.up_blocks:
+            x_t = self.dropout(up_block(x_t))
+            x_t_list.append(x_t)
 
         # cnn
-        x_u = self.layers[0](input)
-
-        x_u_2 = self.drop(self.layers[1](x_u))
-        x_u_1 = self.drop(self.layers[2](x_u_2))
-        x_u = self.drop(self.layers[3](x_u_1))
+        x_u = self.resnet_blocks[0](input)
+        x_u_list = list()
+        for resnet_block in self.resnet_blocks[1 : 1 + len(x_t_list)]:
+            x_u = self.dropout(resnet_block(x_u))
+            x_u_list.append(x_u)
+        x_u_list = list(reversed(x_u_list))
 
         # bifusion
-        x_c = self.bifusion(x_u, x_t)
+        x_b_list = list()
+        for i, (bifusion_block, x_u, x_t) in enumerate(
+            zip(self.bifusion_blocks, x_u_list, x_t_list)
+        ):
+            x_temp = bifusion_block[0](x_u, x_t)
+            if i == 0:
+                x_b = bifusion_block[1](x_temp)
+            else:
+                x_b = bifusion_block[1](x_b, x_temp)
+            x_b_list.append(x_b)
 
-        x_c_1 = self.bifusion1(x_u_1, x_t_1)
-        x_c_1 = self.bifusion1_up(x_c, x_c_1)
-
-        x_c_2 = self.bifusion2(x_u_2, x_t_2)
-        x_c_2 = self.bifusion2_up(x_c_1, x_c_2)
-
-        # decoder
-        output_x = self.final_x(x_c)
-        output_1 = self.final_1(x_t_2)
-        output_2 = self.final_2(x_c_2)
-        outputs = [output_x, output_1, output_2]
-
-        return outputs
-
-    def _reshape_input(self, input: torch.Tensor):
-        (n_batch, n_patch, hidden) = input.size()
-        height, width = int(math.sqrt(n_patch)), int(math.sqrt(n_patch))
-        x = input.permute(0, 2, 1)
-        x = x.contiguous().view(n_batch, hidden, height, width)
-        return x
-
-    def _load_from(self):
-        weights = np.load(self.config.transformer.pretrained_path)
-        with torch.no_grad():
-            self.transformer.load_from(weights)
+        output_x = self.final_x(x_b_list[0])
+        output_1 = self.final_1(x_t_list[-1])
+        output_2 = self.final_2(x_b_list[-1])
+        return [output_2, output_1, output_x]

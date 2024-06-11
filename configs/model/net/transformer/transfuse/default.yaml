@@ -15,14 +15,13 @@ optimizer:
 scheduler: null
 
 net:
-  _target_: libs.models.unet.transformer.transfuse.TransFuse
+  _target_: libs.models.unet.transformer.TransFuse
   input_dim: 3
   output_dim: 1
-  drop_rate: 0.2
-  img_size: ${data.img_size}
+  drop_rate: 0.1
   init_type: "kaiming"
 
-loss_weights: [0.2, 0.3, 0.5]
+loss_weights: [0.5, 0.3, 0.2]
 
 # compile model for faster training with pytorch 2.0
 compile: false

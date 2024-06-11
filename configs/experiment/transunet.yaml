@@ -6,7 +6,7 @@
 defaults:
   - override /data: crack
   - override /model: net/transformer/transunet/default
-  - override /model/net: transformer/transunet/b16
+  - override /model/net: transformer/transunet/r50_b16
   - override /callbacks: default
   - override /trainer: default
 

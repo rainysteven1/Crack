@@ -46,9 +46,9 @@ class _Decoder(nn.Module):
         self,
         embedding_dim: int,
         decoder_dims: List[int],
-        n_skips: Optional[int],
-        skip_dims: Optional[List[int]],
         init_type: Optional[str],
+        n_skips: Optional[int] = None,
+        skip_dims: Optional[List[int]] = None,
     ) -> None:
         super().__init__()
         input_dims = [self.head_dim] + list(decoder_dims[:-1])

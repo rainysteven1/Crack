@@ -55,27 +55,28 @@ class _PatchEmbedding(nn.Module):
         img_size: int,
         patch_size: int,
         embedding_dim: int,
-        backbone_config: Optional[DictConfig],
         is_cls: bool,
         dropout: Optional[float],
+        backbone_config: Optional[DictConfig] = None,
     ) -> None:
         super().__init__()
         projection = projection if projection else _PatchProjection
         self.is_cls = is_cls
+        self.is_hybrid = backbone_config is not None
 
-        if backbone_config:
+        if self.is_hybrid:
             grid_size = backbone_config.pop("grid_size")
             patch_size = img_size // self.base_size // grid_size
             patch_size = patch_size * self.base_size
         n_patches = img_size // patch_size
-        self.hybrid = backbone_config is not None
 
         # Linear Projection
-        if self.hybrid:
-            self.backbone = ResNet(input_dim, **backbone_config)
+        if self.is_hybrid:
+            hybrid_backbone = backbone_config.pop("hybrid_backbone")
+            self.backbone = hybrid_backbone(input_dim, **backbone_config)
             input_dim = self.backbone.width * self.ratio
         self.projection = projection(
-            input_dim, embedding_dim, patch_size, n_patches, self.hybrid
+            input_dim, embedding_dim, patch_size, n_patches, self.is_hybrid
         )
 
         if is_cls:
@@ -92,18 +93,18 @@ class _PatchEmbedding(nn.Module):
 
     def forward(self, input: torch.Tensor):
         x = input
-        if self.hybrid:
+        if self.is_hybrid:
             x, features = self.backbone(x)
         else:
             features = None
         x = self.projection(x)
         if self.is_cls:
-            cls_tokens = repeat(self.cls_token, "1 n d -> b n d", b=input.shape[0])
+            cls_tokens = repeat(self.cls_token, "1 1 d -> b 1 d", b=input.shape[0])
             x = torch.cat((cls_tokens, x), dim=1)
         return self.dropout(x + self.pos_embedding), features
 
     def load_from(self, weights: OrderedDict, _: str, weights_keys: DictConfig):
-        if self.hybrid:
+        if self.is_hybrid:
             self.backbone.load_from(weights, weights_keys["backbone"])
 
         if hasattr(self.projection, "load_from"):
@@ -157,6 +158,17 @@ class _MultiHeadAttention(nn.Sequential):
         )
 
 
+class _MLPBlock(nn.Sequential):
+    def __init__(self, embedding_dim: int, mlp_dim: int, dropout: float) -> None:
+        super().__init__(
+            nn.Linear(embedding_dim, mlp_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(mlp_dim, embedding_dim),
+            nn.Dropout(dropout),
+        )
+
+
 class _PreNorm(nn.Sequential):
     def __init__(self, embedding_dim: int, fn: nn.Module):
         super().__init__()
@@ -169,22 +181,11 @@ class _PreNorm(nn.Sequential):
         return self.fn(x, **kwargs) + input
 
 
-class _MLPBlock(nn.Sequential):
-    def __init__(self, embedding_dim: int, mlp_dim: int, dropout: float) -> None:
-        super().__init__(
-            nn.Linear(embedding_dim, mlp_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(mlp_dim, embedding_dim),
-            nn.Dropout(dropout),
-        )
-
-
 class _TransformerEncoderBlock(nn.Sequential):
     def __init__(
         self,
         embedding_dim: int,
-        mlp_dim: int,
+        mlp_ratio: float,
         mlp_dropout: float,
         **kwargs,
     ) -> None:
@@ -196,7 +197,7 @@ class _TransformerEncoderBlock(nn.Sequential):
             ),
             _PreNorm(
                 embedding_dim,
-                _MLPBlock(embedding_dim, mlp_dim, mlp_dropout),
+                _MLPBlock(embedding_dim, int(embedding_dim * mlp_ratio), mlp_dropout),
             ),
         )
 
@@ -290,5 +291,7 @@ class VisionTransformer(nn.Module):
         return output, features
 
     def _load_from(self, weights: OrderedDict, source: str, weights_keys: DictConfig):
+        if "model" in weights.keys():
+            weights = weights.get("model")
         self.patch_embedding.load_from(weights, source, weights_keys["patch_embedding"])
         self.encoder.load_from(weights, source, weights_keys["encoder"])
