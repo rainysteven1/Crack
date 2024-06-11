@@ -1,0 +1,16 @@
+defaults:
+  - /model/net/transformer/transunet/b16@_here_
+
+config:
+  pretrained:
+    path: ${paths.checkpoints_dir}/jx_vit_base_resnet50_224_in21k-6f7c7740.pth
+
+  patch_embedding:
+    backbone_config:
+      grid_size: 16
+      ratio: 1
+      stage_cfg: null
+
+  decoder:
+    skip_dims: [512, 256, 64, 16]
+    n_skips: 3

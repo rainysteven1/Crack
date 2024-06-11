@@ -1,0 +1,24 @@
+config:
+  pretrained:
+    path: null
+    source: timm
+    weights_keys:
+      patch_embedding:
+        projection: patch_embed.proj.{}
+        cls_token: cls_token
+        pos_embedding: pos_embed
+        backbone:
+          input_block: patch_embed.backbone.stem.{0}.{1}
+          stages:
+            root: patch_embed.backbone.stages.{0}.blocks.{1}.{{}}.{2}
+            skip_block: downsample.{}
+
+      encoder:
+        norm: norm
+        block:
+          root: blocks.{0}.{{}}.{1}
+          norm: norm{}
+          qkv: attn.qkv
+          fn:
+            proj: attn.proj
+            mlp: mlp.fc{}

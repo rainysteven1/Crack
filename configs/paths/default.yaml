@@ -11,6 +11,7 @@ log_dir: ${paths.root_dir}/logs
 
 # path to resources directory
 resources_dir: ${paths.root_dir}/resources
+checkpoints_dir: ${paths.resources_dir}/checkpoints
 
 # path to output directory, created dynamically by hydra
 # path generation pattern is specified in `configs/hydra/default.yaml`

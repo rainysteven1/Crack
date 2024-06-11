@@ -8,6 +8,7 @@ config:
     img_size: 224
     patch_size: 16
     embedding_dim: ${model.net.config.shared_params.embedding_dim}
+    backbone_config: null
     is_cls: true
     dropout: 0.1
 

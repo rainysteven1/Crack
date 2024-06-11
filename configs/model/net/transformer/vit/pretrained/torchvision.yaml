@@ -3,13 +3,17 @@ config:
     path: null
     source: torchvision
     weights_keys:
-      cls_token: class_token
-      pos_embedding: encoder.pos_embedding
-      encoder_norm: encoder.ln
-      encoder_block:
-        root: "encoder.layers.encoder_layer_{0}.{{}}.{1}"
-        norm: "ln_{}"
-        qkv: self_attention.in_proj
-        fn:
-          proj: self_attention.out_proj
-          mlp: "mlp.linear_{}"
+      patch_embedding:
+        projection: conv_proj.{}
+        cls_token: class_token
+        pos_embedding: encoder.pos_embedding
+
+      encoder:
+        norm: encoder.ln
+        block:
+          root: encoder.layers.encoder_layer_{0}.{{}}.{1}
+          norm: ln_{}
+          qkv: self_attention.in_proj
+          fn:
+            proj: self_attention.out_proj
+            mlp: mlp.linear_{}

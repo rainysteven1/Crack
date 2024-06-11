@@ -4,57 +4,110 @@ import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange, repeat
+from einops.layers.torch import Rearrange
 from omegaconf import DictConfig
 from scipy import ndimage
 
 from ...utils.utils import np2th
+from ..backbone.vit_resnet import ResNet
 from ..modules.attention import MHSA
 from ..modules.base import IntermediateSequential
 
 __all__ = ["VisionTransformer"]
 
 
+class _PatchProjection(nn.Sequential):
+    def __init__(
+        self,
+        input_dim: int,
+        embedding_dim: int,
+        patch_size: int,
+        n_patches: int,
+        is_hybrid: bool,
+    ) -> None:
+        super().__init__(
+            nn.Conv2d(
+                input_dim,
+                embedding_dim,
+                kernel_size=1 if is_hybrid else patch_size,
+                stride=1 if is_hybrid else patch_size,
+            ),
+            Rearrange("b c h w -> b (h w) c", h=n_patches, w=n_patches),
+        )
+
+    def load_from(self, weights: OrderedDict, weights_key: str):
+        state_dict = {
+            key: weights[weights_key.format(key.split(".")[-1])]
+            for key in self.state_dict().keys()
+        }
+        self.load_state_dict(state_dict)
+
+
 class _PatchEmbedding(nn.Module):
+
+    base_size = 16
+    ratio = 16
 
     def __init__(
         self,
         input_dim: int,
-        projection: nn.Module,
+        projection: Optional[nn.Module],
         img_size: int,
         patch_size: int,
         embedding_dim: int,
+        backbone_config: Optional[DictConfig],
         is_cls: bool,
         dropout: Optional[float],
     ) -> None:
         super().__init__()
-        n_patch = img_size // patch_size
+        projection = projection if projection else _PatchProjection
         self.is_cls = is_cls
 
+        if backbone_config:
+            grid_size = backbone_config.pop("grid_size")
+            patch_size = img_size // self.base_size // grid_size
+            patch_size = patch_size * self.base_size
+        n_patches = img_size // patch_size
+        self.hybrid = backbone_config is not None
+
         # Linear Projection
-        self.projection = projection(input_dim, embedding_dim, patch_size, n_patch)
+        if self.hybrid:
+            self.backbone = ResNet(input_dim, **backbone_config)
+            input_dim = self.backbone.width * self.ratio
+        self.projection = projection(
+            input_dim, embedding_dim, patch_size, n_patches, self.hybrid
+        )
+
         if is_cls:
             self.cls_token = nn.Parameter(torch.randn(1, 1, embedding_dim))
             self.pos_embedding = nn.Parameter(
-                torch.randn(1, 1 + n_patch**2, embedding_dim)
+                torch.randn(1, 1 + n_patches**2, embedding_dim)
             )
         else:
-            self.pos_embedding = nn.Parameter(torch.randn(1, n_patch**2, embedding_dim))
+            self.pos_embedding = nn.Parameter(
+                torch.randn(1, n_patches**2, embedding_dim)
+            )
 
         self.dropout = nn.Identity() if not dropout else nn.Dropout(dropout)
 
     def forward(self, input: torch.Tensor):
-        n_batch = input.shape[0]
-        x = self.projection(input)
-        if len(x.shape) == 4:
-            x = rearrange(x, "b n h w -> b (h w) n")
+        x = input
+        if self.hybrid:
+            x, features = self.backbone(x)
+        else:
+            features = None
+        x = self.projection(x)
         if self.is_cls:
-            cls_tokens = repeat(self.cls_token, "() n d -> b n d", b=n_batch)
+            cls_tokens = repeat(self.cls_token, "1 n d -> b n d", b=input.shape[0])
             x = torch.cat((cls_tokens, x), dim=1)
-        return self.dropout(x + self.pos_embedding)
+        return self.dropout(x + self.pos_embedding), features
 
     def load_from(self, weights: OrderedDict, _: str, weights_keys: DictConfig):
+        if self.hybrid:
+            self.backbone.load_from(weights, weights_keys["backbone"])
+
         if hasattr(self.projection, "load_from"):
-            getattr(self.projection, "load_from")(weights)
+            getattr(self.projection, "load_from")(weights, weights_keys["projection"])
 
         with torch.no_grad():
             # cls_token
@@ -62,23 +115,30 @@ class _PatchEmbedding(nn.Module):
                 self.cls_token.copy_(weights[weights_keys["cls_token"]])
             # pos_embedding
             pos_embed = weights[weights_keys["pos_embedding"]]
-            if pos_embed.size() == self.pos_embedding.size():
+            if pos_embed.shape == self.pos_embedding.shape:
                 self.pos_embedding.copy_(pos_embed)
-            elif pos_embed.size()[1] - 1 == self.pos_embedding.size()[1]:
+            elif pos_embed.shape[1] - 1 == self.pos_embedding.shape[1]:
                 pos_embed = pos_embed[:, 1:]
                 self.pos_embedding.copy_(pos_embed)
             else:
-                ntok_new = self.pos_embedding.size(1) - 1
-                pos_embed_grid = pos_embed[0, 1:]
-                gs_old = int(np.sqrt(len(pos_embed_grid)))
+                pos_embed_grid = pos_embed[:, 1:]
+                ntok_new = self.pos_embedding.shape[1] - (1 if self.is_cls else 0)
+                gs_old = int(np.sqrt(pos_embed_grid.shape[1]))
                 gs_new = int(np.sqrt(ntok_new))
-                pos_embed_grid = pos_embed_grid.reshape(gs_old, gs_old, -1)
-                zoom = (gs_new / gs_old, gs_new / gs_old, 1)
-                pos_embed_grid = ndimage.zoom(pos_embed_grid, zoom, order=1)  # th2np
-                pos_embed_grid = pos_embed_grid.reshape(1, gs_new * gs_new, -1)
-                if hasattr(self, "cls_token"):
+                pos_embed_grid = rearrange(
+                    pos_embed_grid, "1 (h w) d -> h w d", h=gs_old, w=gs_old
+                )
+                pos_embed_grid = ndimage.zoom(
+                    pos_embed_grid, (gs_new / gs_old, gs_new / gs_old, 1), order=1
+                )
+                pos_embed_grid = rearrange(
+                    pos_embed_grid, "h w d -> 1 (h w) d", h=gs_new, w=gs_new
+                )
+                if self.is_cls:
                     self.pos_embedding[:, :1].copy_(pos_embed[:, :1])
                     self.pos_embedding[:, 1:].copy_(np2th(pos_embed_grid))
+                else:
+                    self.pos_embedding.copy_(np2th(pos_embed_grid))
 
 
 class _MultiHeadAttention(nn.Sequential):
@@ -172,7 +232,7 @@ class _TransformerEncoder(nn.Module):
         state_dict = dict()
 
         if self.is_norm:
-            norm_prefix = weights_keys["encoder_norm"]
+            norm_prefix = weights_keys["norm"]
             for key in self.norm.state_dict().keys():
                 state_dict[f"norm.{key}"] = weights[f"{norm_prefix}.{key}"]
 
@@ -180,51 +240,55 @@ class _TransformerEncoder(nn.Module):
             new_key = f"transformer_encoder_blocks.{key}"
             str_list = key.split(".")
             layer_idx = int(str_list[1])
-            block_dict = weights_keys["encoder_block"]
-            root = block_dict["root"].format(str_list[0], str_list[-1])
+            block = weights_keys["block"]
+            root = block["root"].format(str_list[0], str_list[-1])
             if "norm" in str_list:
                 state_dict[new_key] = weights[
-                    root.format(block_dict["norm"].format(str(layer_idx + 1)))
+                    root.format(block["norm"].format(str(layer_idx + 1)))
                 ]
             elif "qkv" in str_list:
-                weights_key = root.format(block_dict["qkv"])
+                weights_key = root.format(block["qkv"])
                 if source == "torchvision":
                     weights_key = "_".join(weights_key.rsplit(".", 1))
                 state_dict[new_key] = weights[weights_key]
             elif "fn" in str_list:
                 if layer_idx == 0:
-                    state_dict[new_key] = weights[root.format(block_dict["fn"]["proj"])]
+                    state_dict[new_key] = weights[root.format(block["fn"]["proj"])]
                 elif layer_idx == 1:
                     state_dict[new_key] = weights[
                         root.format(
-                            block_dict["fn"]["mlp"].format(
-                                1 if str_list[-2] == "0" else 2
-                            )
+                            block["fn"]["mlp"].format(1 if str_list[-2] == "0" else 2)
                         )
                     ]
         self.load_state_dict(state_dict)
 
 
-class VisionTransformer(nn.Sequential):
+class VisionTransformer(nn.Module):
     def __init__(
         self,
         input_dim: int,
         config: DictConfig,
-        patch_projection: nn.Module,
+        patch_projection: Optional[nn.Module] = None,
     ):
+        super().__init__()
         pretrained: Optional[DictConfig] = config.pop("pretrained", None)
 
-        super().__init__(
-            _PatchEmbedding(
-                input_dim, patch_projection, **config.get("patch_embedding")
-            ),
-            _TransformerEncoder(config.get("encoder_block"), **config.get("encoder")),
+        self.patch_embedding = _PatchEmbedding(
+            input_dim, patch_projection, **config.get("patch_embedding")
+        )
+        self.encoder = _TransformerEncoder(
+            config.get("encoder_block"), **config.get("encoder")
         )
 
         if pretrained:
             path = pretrained.pop("path")
             self._load_from(torch.load(path), **pretrained)
 
+    def forward(self, input: torch.Tensor):
+        embedding_output, features = self.patch_embedding(input)
+        output = self.encoder(embedding_output)
+        return output, features
+
     def _load_from(self, weights: OrderedDict, source: str, weights_keys: DictConfig):
-        for _, module in self.named_children():
-            module.load_from(weights, source, weights_keys)
+        self.patch_embedding.load_from(weights, source, weights_keys["patch_embedding"])
+        self.encoder.load_from(weights, source, weights_keys["encoder"])

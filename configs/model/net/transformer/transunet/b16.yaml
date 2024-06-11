@@ -1,10 +1,10 @@
 defaults:
   - /model/net/transformer/vit/b16@_here_
-  - /model/net/transformer/vit/pretrained/torchvision@_here_
+  - /model/net/transformer/vit/pretrained/timm@_here_
 
 config:
   pretrained:
-    path: ./resources/checkpoints/vit_b_16-c867db91.pth
+    path: ${paths.checkpoints_dir}/jx_vit_base_patch16_224_in21k-e5005f0a.pth
 
   patch_embedding:
     img_size: ${data.dataset.img_size}

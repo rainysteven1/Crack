@@ -27,6 +27,7 @@ net:
   _target_: libs.models.unet.transformer.transunet.TransUNet
   input_dim: 3
   output_dim: 1
+  init_type: "kaiming"
 
 # compile model for faster training with pytorch 2.0
 compile: false
