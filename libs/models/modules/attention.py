@@ -36,20 +36,36 @@ class MHSA(nn.Module):
     """Multi-Head Self-Attention module."""
 
     def __init__(
-        self, input_dim: int, n_heads: int, qkv_bias: bool, dropout: float
+        self,
+        input_dim: int,
+        n_heads: int,
+        head_dim: int,
+        qkv_bias: bool,
+        attn_dropout: Optional[float] = None,
+        proj_dropout: Optional[float] = None,
     ) -> None:
         super().__init__()
+        inner_dim = n_heads * head_dim
         self.n_heads = n_heads
+        self.head_dim = head_dim
         self.scale = input_dim**-0.5
 
-        self.qkv = nn.Linear(input_dim, input_dim * 3, bias=qkv_bias)
-        self.dropout = nn.Dropout(dropout)
+        self.qkv = nn.Linear(input_dim, inner_dim * 3, bias=qkv_bias)
+        self.attn_dropout = nn.Dropout(attn_dropout) if attn_dropout else nn.Identity()
+
+        self.proj_out = nn.Sequential(
+            nn.Linear(inner_dim, input_dim),
+            nn.Dropout(proj_dropout) if proj_dropout else nn.Identity(),
+        )
 
     def forward(self, input: torch.Tensor, mask: Optional[torch.Tensor] = None):
-        qkv = rearrange(
-            self.qkv(input), "b n (h d qkv) -> (qkv) b h n d", h=self.n_heads, qkv=3
+        qkv = self.qkv(input).chunk(3, dim=-1)
+        q, k, v = map(
+            lambda t: rearrange(
+                t, "b n (h d) -> b h n d", h=self.n_heads, d=self.head_dim
+            ),
+            qkv,
         )
-        q, k, v = qkv[0], qkv[1], qkv[2]
 
         energy = torch.einsum(
             "bhqd, bhkd -> bhqk", q, k
@@ -58,11 +74,11 @@ class MHSA(nn.Module):
             fill_value = torch.finfo(torch.float32).min
             energy.mask_fill(~mask, fill_value)
         attn = F.softmax(energy * self.scale, dim=-1)
-        attn = self.dropout(attn)
+        attn = self.attn_dropout(attn)
 
         output = torch.einsum("bhal, bhlv -> bhav", attn, v)
         output = rearrange(output, "b h n d -> b n (h d)")
-        return output
+        return self.proj_out(output)
 
 
 class _MHSA(nn.Module):

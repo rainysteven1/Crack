@@ -1,9 +1,0 @@
-defaults:
-  - /model/net/transformer/vit/b16@_here_
-
-config:
-  transformer:
-    pretrained_path: ${paths.resources_dir}/checkpoints/ViT-L_16.npz
-    embedding_dim: 1024
-    n_heads: 16
-    n_blocks: 24

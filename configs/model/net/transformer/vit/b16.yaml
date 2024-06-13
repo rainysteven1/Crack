@@ -21,6 +21,7 @@ config:
   encoder_block:
     embedding_dim: ${model.net.config.shared_params.embedding_dim}
     n_heads: 12
+    head_dim: 64
     qkv_bias: true
     attn_dropout: 0.0
     proj_dropout: ${model.net.config.shared_params.dropout}

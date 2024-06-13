@@ -11,6 +11,7 @@ from scipy import ndimage
 from ...utils.utils import np2th
 from ..modules.attention import MHSA
 from ..modules.base import IntermediateSequential
+from ._base import MLPBlock, PreNorm
 
 __all__ = ["VisionTransformer"]
 
@@ -141,45 +142,6 @@ class _PatchEmbedding(nn.Module):
                     self.pos_embedding.copy_(np2th(pos_embed_grid))
 
 
-class _MultiHeadAttention(nn.Sequential):
-    def __init__(
-        self,
-        embedding_dim: int,
-        n_heads: int,
-        qkv_bias: bool,
-        attn_dropout: float,
-        proj_dropout: float,
-    ) -> None:
-        super().__init__(
-            MHSA(embedding_dim, n_heads, qkv_bias, attn_dropout),
-            nn.Linear(embedding_dim, embedding_dim),
-            nn.Dropout(proj_dropout),
-        )
-
-
-class _MLPBlock(nn.Sequential):
-    def __init__(self, embedding_dim: int, mlp_dim: int, dropout: float) -> None:
-        super().__init__(
-            nn.Linear(embedding_dim, mlp_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(mlp_dim, embedding_dim),
-            nn.Dropout(dropout),
-        )
-
-
-class _PreNorm(nn.Sequential):
-    def __init__(self, embedding_dim: int, fn: nn.Module):
-        super().__init__()
-
-        self.norm = nn.LayerNorm(embedding_dim, eps=1e-6)
-        self.fn = fn
-
-    def forward(self, input: torch.tensor, **kwargs):
-        x = self.norm(input)
-        return self.fn(x, **kwargs) + input
-
-
 class _TransformerEncoderBlock(nn.Sequential):
     def __init__(
         self,
@@ -188,15 +150,21 @@ class _TransformerEncoderBlock(nn.Sequential):
         mlp_dropout: float,
         **kwargs,
     ) -> None:
+        proj_dropout = kwargs.get("proj_dropout")
 
         super().__init__(
-            _PreNorm(
+            PreNorm(
                 embedding_dim,
-                _MultiHeadAttention(embedding_dim, **kwargs),
+                MHSA(embedding_dim, **kwargs),
             ),
-            _PreNorm(
+            PreNorm(
                 embedding_dim,
-                _MLPBlock(embedding_dim, int(embedding_dim * mlp_ratio), mlp_dropout),
+                MLPBlock(
+                    embedding_dim,
+                    int(embedding_dim * mlp_ratio),
+                    mlp_dropout,
+                    proj_dropout,
+                ),
             ),
         )
 

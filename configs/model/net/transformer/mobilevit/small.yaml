@@ -1,0 +1,41 @@
+config:
+  dims: [32, 32, 64, 64, 64, 96, 96, 128, 128, 160, 160, 640]
+
+  redisual:
+    strides: [1, 2, 1, 1]
+    ratio: 4
+
+  trunk:
+    block_configs: [[2, 144, 2], [4, 192, 2], [3, 240, 2]]
+    patch_size: 2
+    n_heads: 4
+    head_dim: null
+    qkv_bias: true
+    attn_dropout: 0.1
+    mlp_dropout: 0.0
+    proj_dropout: 0.1
+
+  pretrained:
+    path: ./resources/checkpoints/mobilevit/mobilevit-small.bin
+    weights_keys:
+      stem: conv_stem
+      last_conv: conv_1x1_exp
+      root: mobilevit.{{}}.{0}.{1}
+      inverted_residual:
+        root: encoder.layer.{}.{}.{}
+        normal: layer
+        downsample: downsampling_layer
+        blocks: [expand_1x1, conv_3x3, reduce_1x1]
+      mobilevit_block:
+        root: encoder.layer.{0}.{{}}
+        local_representation: [conv_kxk, conv_1x1]
+        transformer:
+          root: mobilevit.encoder.layer.{0}.transformer.layer.{1}.{{}}.{2}
+          layernorm: mobilevit.encoder.layer.{}.layernorm.{}
+          norms: [layernorm_before, layernorm_after]
+          attn:
+            attention: attention.attention.{}
+            proj_out: attention.output.dense
+          mlp: [intermediate.dense, output.dense]
+        fusion_block1: conv_projection
+        fusion_block2: fusion

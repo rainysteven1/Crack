@@ -1,0 +1,11 @@
+defaults:
+  - /model/net/transformer/mobilenet/small@_here_
+
+config:
+  dims: [16, 16, 24, 24, 24, 48, 48, 64, 64, 80, 80, 320]
+
+  redisual:
+    ratio: 2
+
+  trunk:
+    block_configs: [[2, 64, 2], [4, 80, 2], [3, 96, 2]]

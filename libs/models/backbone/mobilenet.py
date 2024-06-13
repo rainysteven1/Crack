@@ -80,29 +80,27 @@ def _make_divisible(v: float, divisor: int, min_value: Optional[int] = None) -> 
     return new_v
 
 
-class _InvertedResidual(nn.Sequential):
+class InvertedResidual(nn.Sequential):
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
-        middle_dim: Optional[int],
-        kernel_size: int,
-        stride: int,
-        padding: int,
-        dilation: int,
-        ratio: Optional[int],
-        is_redisual: bool,
-        is_se: bool,
-        relu_type: nn.Module,
-        init_type: Optional[str],
+        middle_dim: Optional[int] = None,
+        kernel_size: int = 3,
+        stride: int = 1,
+        padding: int = 1,
+        dilation: int = 1,
+        ratio: Optional[int] = None,
+        is_se: bool = False,
+        relu_type: nn.Module = nn.ReLU6,
+        init_type: Optional[str] = None,
     ) -> None:
         assert kernel_size in _KERNEL_SIZES
         assert stride in _STRIDES
 
         middle_dim = middle_dim or int(round(input_dim * ratio))
-        self.is_redisual = is_redisual
+        self.is_redisual = stride == 1 and input_dim == output_dim
         self.padding = padding
-        self.is_cn = stride > 1
 
         conv_list = [
             # Depthwise layer
@@ -113,7 +111,7 @@ class _InvertedResidual(nn.Sequential):
                 stride,
                 padding,
                 dilation,
-                middle_dim,
+                groups=middle_dim,
                 is_bias=False,
                 relu_type=relu_type,
                 init_type=init_type,
@@ -182,7 +180,6 @@ class _MoblieNetHead(IntermediateSequential):
         self.inverted_redisual_cfg = inverted_redisual_cfg
         self.init_type = init_type
         self.is_dilation = output_stride is not None
-        self.return_intermediate = return_intermediate
         self.round_nearest = round_nearest
 
         first_output_dim = _make_divisible(
@@ -276,18 +273,13 @@ class _MobileNetV2(_MoblieNetHead):
             # layers
             for i in range(n):
                 stage.append(
-                    _InvertedResidual(
+                    InvertedResidual(
                         self.middle_dim,
                         output_dim,
-                        None,
-                        kernel_size=3,
                         stride=1 if i != 0 else stride,
                         padding=0,
                         dilation=dilation,
                         ratio=t,
-                        is_redisual=stride == 1 and self.middle_dim == output_dim,
-                        is_se=False,
-                        relu_type=nn.ReLU6,
                         init_type=self.init_type,
                     )
                 )
@@ -380,7 +372,7 @@ class _MobileNetV3(_MoblieNetHead):
                     self.current_stride *= s
             output_dim = _make_divisible(c * self.width_mult, self.round_nearest)
             stages.append(
-                _InvertedResidual(
+                InvertedResidual(
                     self.middle_dim,
                     output_dim,
                     exp,
@@ -389,7 +381,6 @@ class _MobileNetV3(_MoblieNetHead):
                     padding=(k - 1) // 2,
                     dilation=dilation,
                     ratio=1 if idx == 0 else None,
-                    is_redisual=s == 1 and self.middle_dim == output_dim,
                     is_se=se,
                     relu_type=nn.ReLU6 if nl == "RE" else nn.Hardswish,
                     init_type=self.init_type,
