@@ -1,0 +1,43 @@
+defaults:
+  - net: null
+
+_target_: src.models.module.BaseModule
+
+criterion:
+  _target_: libs.utils.losses.DiceBCELoss
+  loss_weights: [1.0, 1.0]
+  class_weights: [0.04, 0.96]
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 1.0e-4
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.5
+  patience: 6
+
+net:
+  _target_: libs.models.unet.transformer.TransMUNet
+  input_dim: 3
+  output_dim: 1
+  config:
+    dims: [32, 64, 128, 256, 512]
+    trunk:
+      block_configs: [[2, 144, 2], [4, 240, 2], [3, 320, 2]]
+      patch_size: 4
+      n_heads: 4
+      head_dim: 8
+      qkv_bias: false
+      attn_dropout: null
+      mlp_dropout: 0.0
+      proj_dropout: 0.0
+  init_type: "kaiming"
+
+loss_weights: [0.8, 0.2]
+
+# compile model for faster training with pytorch 2.0
+compile: false

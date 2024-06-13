@@ -1,4 +1,4 @@
-from typing import List, Optional, OrderedDict
+from typing import Callable, List, Optional, OrderedDict
 
 import torch
 import torch.nn as nn
@@ -10,7 +10,7 @@ from ..backbone.mobilenet import InvertedResidual
 from ..modules.base import BasicBlock
 from ._base import MLPBlock, PreNorm
 
-__all__ = ["MobileViT"]
+__all__ = ["MobileViT", "MobileViTBlock"]
 
 
 class _MultiHeadAttention(nn.Module):
@@ -99,7 +99,7 @@ class _TransformerEncoder(nn.Sequential):
         )
 
 
-class _MobileViTBlock(nn.Module):
+class MobileViTBlock(nn.Module):
 
     def __init__(
         self,
@@ -108,15 +108,22 @@ class _MobileViTBlock(nn.Module):
         patch_size: int,
         block_config: List[int],
         transformer_config: DictConfig,
+        relu_type: Callable = nn.SiLU,
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
-        relu_type = nn.SiLU
         transformer_dim = block_config[1]
         self.patch_size = patch_size
 
         # Local representation
         self.local_representation = nn.Sequential(
-            BasicBlock(input_dim, input_dim, is_bias=False, relu_type=relu_type),
+            BasicBlock(
+                input_dim,
+                input_dim,
+                is_bias=False,
+                relu_type=relu_type,
+                init_type=init_type,
+            ),
             BasicBlock(
                 input_dim,
                 transformer_dim,
@@ -125,6 +132,7 @@ class _MobileViTBlock(nn.Module):
                 is_bias=False,
                 is_bn=False,
                 is_relu=False,
+                init_type=init_type,
             ),
         )
 
@@ -139,9 +147,14 @@ class _MobileViTBlock(nn.Module):
             padding=0,
             is_bias=False,
             relu_type=relu_type,
+            init_type=init_type,
         )
         self.fusion_block2 = BasicBlock(
-            2 * input_dim, output_dim, is_bias=False, relu_type=relu_type
+            2 * input_dim,
+            output_dim,
+            is_bias=False,
+            relu_type=relu_type,
+            init_type=init_type,
         )
 
     def forward(self, input: torch.Tensor):
@@ -164,6 +177,9 @@ class _MobileViTBlock(nn.Module):
 
 
 class MobileViT(nn.Sequential):
+
+    relu_type = nn.SiLU
+
     def __init__(self, input_dim: int, config: DictConfig) -> None:
         dims = config.get("dims")
         redisual_config = config.get("redisual")
@@ -175,14 +191,16 @@ class MobileViT(nn.Sequential):
         patch_size = trunk_config.pop("patch_size")
 
         blocks = [
-            BasicBlock(input_dim, dims[0], stride=2, is_bias=False, relu_type=nn.SiLU),
+            BasicBlock(
+                input_dim, dims[0], stride=2, is_bias=False, relu_type=self.relu_type
+            ),
             BasicBlock(
                 dims[-2],
                 dims[-1],
                 kernel_size=1,
                 padding=0,
                 is_bias=False,
-                relu_type=nn.SiLU,
+                relu_type=self.relu_type,
             ),
         ]
         inverted_residuals = [
@@ -190,7 +208,7 @@ class MobileViT(nn.Sequential):
                 dims[i],
                 dims[i + 1],
                 stride=stride,
-                relu_type=nn.SiLU,
+                relu_type=self.relu_type,
                 **redisual_config,
             )
             for i, stride in enumerate(strides)
@@ -204,12 +222,13 @@ class MobileViT(nn.Sequential):
                         stride=2,
                         **redisual_config,
                     ),
-                    _MobileViTBlock(
+                    MobileViTBlock(
                         dims[i * 2 + length + 1],
                         dims[i * 2 + length + 2],
                         patch_size,
                         block_config,
                         trunk_config,
+                        self.relu_type,
                     ),
                 ]
             )
@@ -225,7 +244,6 @@ class MobileViT(nn.Sequential):
 
     def _load_from(self, weights: OrderedDict, weights_keys: DictConfig):
         state_dict = dict()
-        is_transpose = False
         for key in self.state_dict().keys():
             str_list = key.split(".")
             block_idx = int(str_list[0])
@@ -317,9 +335,5 @@ class MobileViT(nn.Sequential):
                                                 ]
                                             )
 
-            state_dict[key] = (
-                weights[weights_key]
-                if not is_transpose
-                else weights[weights_key].transpose(-1, 0)
-            )
+            state_dict[key] = weights[weights_key]
         self.load_state_dict(state_dict)

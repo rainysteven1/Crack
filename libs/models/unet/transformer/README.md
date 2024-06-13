@@ -6,11 +6,12 @@
 
 ## Paper
 
-| Model                              | Link                               |
-| ---------------------------------- | ---------------------------------- |
-| <a href="#TransUNet">TransUNet</a> | <https://arxiv.org/abs/2102.04306> |
-| <a href="#TransFuse">TransFuse</a> | <https://arxiv.org/abs/2102.08005> |
-| \<a href="#TMUNet"TMUNet</a>       | <https://arxiv.org/abs/2203.01932> |
+| Model                                | Link                               |
+| ------------------------------------ | ---------------------------------- |
+| <a href="#TransUNet">TransUNet</a>   | <https://arxiv.org/abs/2102.04306> |
+| <a href="#TransFuse">TransFuse</a>   | <https://arxiv.org/abs/2102.08005> |
+| \<a href="#TMUNet"TMUNet</a>         | <https://arxiv.org/abs/2203.01932> |
+| \<a href="#TransMUNet"TransMUNet</a> | <https://arxiv.org/abs/2302.11728> |
 
 ## Code
 
@@ -27,3 +28,7 @@
 ### <span id="TMUNet">TMUNet</span>
 
 ![TMUNet](../../../../resources/image/TMUNet.png)
+
+### <span id="TransMUNet">TransMUNet</span>
+
+![TransMUNet](../../../../resources/image/TransMUNet.png)

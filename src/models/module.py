@@ -135,7 +135,7 @@ class BaseModule(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-        length = len(batch)
+        length = len(batch)  # image mask boundary
         logits = self.forward(batch[0])
         if not isinstance(logits, (list, tuple)):
             pred = logits
