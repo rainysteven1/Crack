@@ -1,25 +1,24 @@
-from typing import Optional
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
 
 from ..modules.attention import AttentionBlock
 from ..modules.base import BasicBlock, InitModule, OutputBlock
-from .common import ConvBlock, Encoder
+from ._base import Decoder, DoubleConv, Encoder
 
 
-class _DecoderBlock(InitModule):
+class DecoderBlock(InitModule):
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
-        skip_dim: int | None = None,
+        _: int,
         is_upsample: bool = True,
-        init_type: str | None = None,
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
-        if not skip_dim:
-            skip_dim = output_dim
+        skip_dim = output_dim
 
         self.up_conv = nn.Sequential(
             (
@@ -32,23 +31,19 @@ class _DecoderBlock(InitModule):
             BasicBlock(input_dim, output_dim, init_type=init_type),
         )
         self.attention_block = AttentionBlock(
-            F_g=output_dim, F_l=skip_dim, F_int=output_dim // 2
+            F_g=output_dim, F_l=skip_dim, F_int=output_dim // 2, init_type=init_type
         )
-        self.conv_block = ConvBlock(
+        self.conv_block = DoubleConv(
             skip_dim + output_dim, output_dim, init_type=init_type
         )
 
-        if self.init_type:
-            self._initialize_weights()
-
-    def forward(self, input, skip):
+    def forward(self, input: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
         x1 = self.up_conv(input)
         x2 = self.attention_block(x1, skip)
         x3 = torch.cat((x2, x1), dim=1)
-        output = self.conv_block(x3)
-        return output
+        return self.conv_block(x3)
 
-    def _initialize_weights(self):
+    def _initialize_weights(self) -> None:
         self.init(self.up_conv.children[0])
 
 
@@ -57,30 +52,18 @@ class AttentionUNet(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        filters: list,
-        is_upsample: bool,
+        dims: List[int],
+        is_upsample: bool = True,
         init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
-        length = len(filters)
 
-        self.encoder_blocks = Encoder(input_dim, filters, init_type)
-        self.decoder_blocks = nn.ModuleList(
-            [
-                _DecoderBlock(
-                    filters[i],
-                    filters[i - 1],
-                    is_upsample=is_upsample,
-                    init_type=init_type,
-                )
-                for i in range(length - 1, 0, -1)
-            ]
-        )
-        self.output_block = OutputBlock(filters[0], output_dim, init_type=init_type)
+        self.encoder = Encoder(input_dim, dims, init_type=init_type)
+        self.decoder = Decoder(dims, DecoderBlock, init_type, is_upsample=is_upsample)
+        self.output_block = OutputBlock(dims[0], output_dim, init_type=init_type)
 
     def forward(self, input: torch.Tensor):
-        x_list = self.encoder_blocks(input)
+        x_list = self.encoder(input)
         x = x_list.pop()
-        for decoder_block in self.decoder_blocks:
-            x = decoder_block(x, x_list.pop())
+        x = self.decoder(x, x_list)
         return self.output_block(x)

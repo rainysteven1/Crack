@@ -21,8 +21,9 @@ net:
   _target_: libs.models.unet.attention_unet.AttentionUNet
   input_dim: 3
   output_dim: 1
-  filters: [64, 128, 256, 512, 1024]
+  dims: [64, 128, 256, 512, 1024]
   is_upsample: true
+  init_type: null
 
 # compile model for faster training with pytorch 2.0
 compile: false

@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: crack
-  - override /model: unet/double_unet
+  - override /model: net/unet/double_unet
   - override /callbacks: default
   - override /trainer: default
 

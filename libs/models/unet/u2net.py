@@ -6,6 +6,8 @@ import torch.nn.functional as F
 
 from ..modules.base import BasicBlock, OutputBlock
 
+__all__ = ["u2net_B", "u2net_S"]
+
 
 class _RSU0_DecoderBlock(nn.Module):
 
@@ -164,7 +166,7 @@ class _DecoderBlock(nn.Module):
         return self.conv_block(torch.cat((x, skip), dim=1))
 
 
-class U2Net(nn.Module):
+class _U2Net(nn.Module):
 
     n_RUS1 = 2
 
@@ -172,7 +174,7 @@ class U2Net(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        filters: list,
+        dims: list,
         n_blocks: list[int],
         e_RUS0_ratio: int,
         e_RUS1_ratio: int,
@@ -180,24 +182,24 @@ class U2Net(nn.Module):
         d_RUS1_ratio: int,
         init_type: Optional[str],
     ) -> None:
-        assert len(filters) == len(n_blocks)
+        assert len(dims) == len(n_blocks)
         assert min(n_blocks) >= 3
 
         super().__init__()
-        new_filters = [filters[0], *filters, filters[-1]]
-        length = len(filters)
+        new_dims = [dims[0], *dims, dims[-1]]
+        length = len(dims)
 
         self.input_block = _RSU0(
-            input_dim, filters[0], filters[0] // 2, n_blocks[0], init_type
+            input_dim, dims[0], dims[0] // 2, n_blocks[0], init_type
         )
         self.encoder_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True),
                     _RSU0(
-                        filters[i],
-                        filters[i + 1],
-                        filters[i + 1] // e_RUS0_ratio,
+                        dims[i],
+                        dims[i + 1],
+                        dims[i + 1] // e_RUS0_ratio,
                         n_blocks[i + 1],
                         init_type,
                     ),
@@ -208,9 +210,9 @@ class U2Net(nn.Module):
                 nn.Sequential(
                     nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True),
                     _RSU1(
-                        filters[-1],
-                        filters[-1],
-                        filters[-1] // e_RUS1_ratio,
+                        dims[-1],
+                        dims[-1],
+                        dims[-1] // e_RUS1_ratio,
                         n_blocks[-1] - 1,
                         init_type,
                     ),
@@ -221,9 +223,9 @@ class U2Net(nn.Module):
         self.decoder_blocks = nn.ModuleList(
             [
                 _DecoderBlock(
-                    new_filters[-2] * 2,
-                    new_filters[-2],
-                    filters[-1] // d_RUS0_ratio,
+                    new_dims[-2] * 2,
+                    new_dims[-2],
+                    dims[-1] // d_RUS0_ratio,
                     n_blocks[-1] - 1,
                     True,
                     init_type,
@@ -232,9 +234,9 @@ class U2Net(nn.Module):
             * (self.n_RUS1 - 1)
             + [
                 _DecoderBlock(
-                    filters[i] * 2,
-                    new_filters[i],
-                    filters[i] // d_RUS1_ratio,
+                    dims[i] * 2,
+                    new_dims[i],
+                    dims[i] // d_RUS1_ratio,
                     n_blocks[i],
                     False,
                     init_type,
@@ -243,12 +245,12 @@ class U2Net(nn.Module):
             ]
         )
 
-        length = len(new_filters)
+        length = len(new_dims)
         self.slide_blocks = nn.ModuleList(
             [
                 nn.Sequential(
                     BasicBlock(
-                        new_filters[i],
+                        new_dims[i],
                         output_dim,
                         is_bn=False,
                         is_relu=False,
@@ -287,7 +289,7 @@ class U2Net(nn.Module):
 def u2net_B(
     input_dim: int,
     output_dim: int,
-    filters: list,
+    dims: list,
     n_blocks: list[int],
     init_type: Optional[str],
 ):
@@ -297,15 +299,13 @@ def u2net_B(
         "d_RUS0_ratio": 2,
         "d_RUS1_ratio": 4,
     }
-    return U2Net(
-        input_dim, output_dim, filters, n_blocks, init_type=init_type, **kwargs
-    )
+    return _U2Net(input_dim, output_dim, dims, n_blocks, init_type=init_type, **kwargs)
 
 
 def u2net_S(
     input_dim: int,
     output_dim: int,
-    filters: list,
+    dims: list,
     n_blocks: list[int],
     init_type: Optional[str],
 ):
@@ -315,7 +315,5 @@ def u2net_S(
         "d_RUS0_ratio": 4,
         "d_RUS1_ratio": 4,
     }
-    assert len(set(filters)) == 1
-    return U2Net(
-        input_dim, output_dim, filters, n_blocks, init_type=init_type, **kwargs
-    )
+    assert len(set(dims)) == 1
+    return _U2Net(input_dim, output_dim, dims, n_blocks, init_type=init_type, **kwargs)

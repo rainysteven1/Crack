@@ -1,7 +1,8 @@
 _target_: src.models.module.BaseModule
 
 criterion:
-  _target_: libs.utils.losses.BCEDiceLoss
+  _target_: libs.utils.losses.DiceBCELoss
+  class_weights: ${data.class_weights}
 
 optimizer:
   _target_: torch.optim.Adam
@@ -15,9 +16,16 @@ scheduler:
   patience: 5
 
 net:
-  _target_: libs.models.unet.double_unet.DoubleUNet
+  _target_: libs.models.unet.DoubleUNet
   input_dim: 3
   output_dim: 1
+  config:
+    encoder1_dims: [64, 128, 256, 512]
+    encoder2_dims: [32, 64, 128, 256]
+    decoder_output_dim: 32
+    aspp_output_dim: 64
+    atrous_rates: [1, 6, 12, 18]
+  init_type: "kaiming"
 
 # compile model for faster training with pytorch 2.0
 compile: false

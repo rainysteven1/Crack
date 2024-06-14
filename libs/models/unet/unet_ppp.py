@@ -5,7 +5,9 @@ import torch
 import torch.nn as nn
 
 from ..modules.base import BasicBlock, InitModule, OutputBlock
-from .common import Encoder
+from ._base import Encoder
+
+__all__ = ["UNet3Plus", "UNet3PlusDeepSup", "UNet3PlusDeepSupCGM"]
 
 
 class _DecoderBlock(nn.Module):
@@ -70,7 +72,7 @@ class _BasicModule(InitModule):
         self.d_length = len(self.filters) - 1
 
         # Encoder
-        self.e = Encoder(input_dim, filters, init_type)
+        self.e = Encoder(input_dim, filters, init_type=init_type)
 
         # Decoder
         self.d = nn.ModuleList()

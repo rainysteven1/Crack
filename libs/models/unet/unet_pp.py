@@ -4,7 +4,9 @@ import torch
 import torch.nn as nn
 
 from ..modules.base import InitModule, OutputBlock
-from .common import ConvBlock, Encoder
+from ._base import DoubleConv, Encoder
+
+__all__ = ["UNet2Plus"]
 
 
 class _DecoderBlock(InitModule):
@@ -23,34 +25,31 @@ class _DecoderBlock(InitModule):
         super().__init__(init_type)
 
         if is_upsample:
-            self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-            self.conv = ConvBlock(
+            self.upsample = nn.Upsample(
+                scale_factor=2, mode="bilinear", align_corners=True
+            )
+            self.conv_block = DoubleConv(
                 input_dim + (N_concat - 1) * output_dim,
                 output_dim,
                 is_bn=False,
                 init_type=init_type,
             )
         else:
-            self.up = nn.ConvTranspose2d(
+            self.upsample = nn.ConvTranspose2d(
                 input_dim, output_dim, kernel_size=4, stride=2, padding=1
             )
-            self.conv = ConvBlock(
+            self.conv_block = DoubleConv(
                 input_dim // 2 + (N_concat - 1) * output_dim,
                 output_dim,
                 is_bn=False,
                 init_type=init_type,
             )
 
-        if self.init_type:
-            self._initialize_weights()
-
     def forward(self, input: torch.Tensor, *skips: tuple[torch.Tensor]):
-        x1 = self.up(input)
-        x = torch.cat([x1, *skips], dim=1)
-        return self.conv(x)
+        return self.conv_block(torch.cat([self.upsample(input), *skips], dim=1))
 
     def _initialize_weights(self):
-        self.init(self.up)
+        self.init(self.upsample)
 
 
 class UNet2Plus(nn.Module):
@@ -60,54 +59,38 @@ class UNet2Plus(nn.Module):
         self,
         input_dim: int,
         output_dim: int,
-        filters: list,
-        is_ds: bool,
-        init_type: Optional[str],
+        dims: list,
+        is_ds: bool = True,
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.is_ds = is_ds
 
         # Encoder
-        self.e = Encoder(input_dim, filters, init_type)
+        self.e = Encoder(input_dim, dims, init_type=init_type)
 
         # Decoder
-        self.d01 = _DecoderBlock(filters[1], filters[0], init_type=init_type)
-        self.d11 = _DecoderBlock(filters[2], filters[1], init_type=init_type)
-        self.d21 = _DecoderBlock(filters[3], filters[2], init_type=init_type)
-        self.d31 = _DecoderBlock(filters[4], filters[3], init_type=init_type)
+        self.d01 = _DecoderBlock(dims[1], dims[0], init_type=init_type)
+        self.d11 = _DecoderBlock(dims[2], dims[1], init_type=init_type)
+        self.d21 = _DecoderBlock(dims[3], dims[2], init_type=init_type)
+        self.d31 = _DecoderBlock(dims[4], dims[3], init_type=init_type)
 
-        self.d02 = _DecoderBlock(
-            filters[1], filters[0], N_concat=3, init_type=init_type
-        )
-        self.d12 = _DecoderBlock(
-            filters[2], filters[1], N_concat=3, init_type=init_type
-        )
-        self.d22 = _DecoderBlock(
-            filters[3], filters[2], N_concat=3, init_type=init_type
-        )
+        self.d02 = _DecoderBlock(dims[1], dims[0], N_concat=3, init_type=init_type)
+        self.d12 = _DecoderBlock(dims[2], dims[1], N_concat=3, init_type=init_type)
+        self.d22 = _DecoderBlock(dims[3], dims[2], N_concat=3, init_type=init_type)
 
-        self.d03 = _DecoderBlock(
-            filters[1], filters[0], N_concat=4, init_type=init_type
-        )
-        self.d13 = _DecoderBlock(
-            filters[2], filters[1], N_concat=4, init_type=init_type
-        )
+        self.d03 = _DecoderBlock(dims[1], dims[0], N_concat=4, init_type=init_type)
+        self.d13 = _DecoderBlock(dims[2], dims[1], N_concat=4, init_type=init_type)
 
-        self.d04 = _DecoderBlock(
-            filters[1], filters[0], N_concat=5, init_type=init_type
+        self.d04 = _DecoderBlock(dims[1], dims[0], N_concat=5, init_type=init_type)
+
+        self.final = (
+            OutputBlock(dims[0], output_dim, init_type)
+            if not is_ds
+            else nn.ModuleList(
+                [OutputBlock(dims[0], output_dim, init_type=init_type)] * 4
+            )
         )
-
-        def final_block():
-            return OutputBlock(filters[0], output_dim, init_type=init_type)
-
-        # Output
-        if self.is_ds:
-            self.final1 = final_block()
-            self.final2 = final_block()
-            self.final3 = final_block()
-            self.final4 = final_block()
-        else:
-            self.final = final_block()
 
     def forward(self, input: torch.Tensor):
         # Encoder
@@ -128,12 +111,7 @@ class UNet2Plus(nn.Module):
 
         x04 = self.d04(x13, x00, x01, x02, x03)
 
-        if self.is_ds:
-            x1 = self.final1(x01)
-            x2 = self.final2(x02)
-            x3 = self.final3(x03)
-            x4 = self.final4(x04)
-            output = [x1, x2, x3, x4]
-        else:
-            output = self.final(x04)
-        return output
+        x_list = [x01, x02, x03, x04]
+
+        outputs = [module(x) for x, module in zip(x_list, self.final)]
+        return outputs if self.is_ds else outputs[-1]

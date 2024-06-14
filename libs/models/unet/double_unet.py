@@ -1,71 +1,56 @@
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from omegaconf import DictConfig
 from torchvision.models import VGG19_Weights, vgg19
 
-from ..modules.base import OutputBlock, SqueezeExciteBlock
+from ..modules.base import BasicBlock, OutputBlock, SqueezeExciteBlock
 from ..modules.pyramid import ASPP_v3
-from .common import ConvBlock
+from ._base import Decoder, DoubleConv, Encoder
 
 __all__ = ["DoubleUNet"]
 
 
-class _ConvBlock1(nn.Module):
+class _ConvBlock(nn.Sequential):
 
     def __init__(
-        self, input_dim: int, output_dim: int, init_type: Optional[str]
+        self, input_dim: int, output_dim: int, init_type: Optional[str] = None
     ) -> None:
-        super().__init__()
-
-        self.layers = nn.Sequential(
-            ConvBlock(input_dim, output_dim, init_type=init_type),
+        super().__init__(
+            DoubleConv(input_dim, output_dim, init_type=init_type),
             SqueezeExciteBlock(output_dim),
         )
 
-    def forward(self, input: torch.Tensor):
-        return self.layers(input)
 
-
-class _DecoderBlock1(nn.Module):
-
-    def __init__(
-        self, input_dim: int, output_dim: int, skip_dim: int, init_type: Optional[str]
-    ) -> None:
-        super().__init__()
-
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
-        self.conv_block = _ConvBlock1(input_dim + skip_dim, output_dim, init_type)
-
-    def forward(self, input: torch.Tensor, skip: torch.Tensor):
-        x1 = self.upsample(input)
-        x2 = torch.cat((x1, skip), dim=1)
-        output = self.conv_block(x2)
-        return output
-
-
-class _DecoderBlock2(nn.Module):
-
+class _DecoderBlock(nn.Module):
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
-        skip1_dim: int,
-        skip2_dim: int,
-        init_type: Optional[str],
+        index: int,
+        skip_dims_list: List[List[int]],
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
 
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
-        self.conv_block = _ConvBlock1(
-            input_dim + skip1_dim + skip2_dim, output_dim, init_type
+        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
+        self.conv_block = _ConvBlock(
+            input_dim + sum(skip_dims_list[index - 1]), output_dim, init_type
         )
 
-    def forward(self, input: torch.Tensor, skip1: torch.Tensor, skip2: torch.Tensor):
-        x1 = self.upsample(input)
-        x2 = torch.cat((x1, skip1, skip2), dim=1)
-        output = self.conv_block(x2)
-        return output
+    def forward(self, input: torch.Tensor, *skips: torch.Tensor) -> torch.Tensor:
+        return self.conv_block(torch.cat((self.upsample(input), *skips), dim=1))
+
+
+class _EncoderBlock(nn.Sequential):
+    def __init__(
+        self, input_dim: int, output_dim: int, init_type: Optional[str] = None
+    ) -> None:
+        super().__init__(
+            nn.MaxPool2d(kernel_size=2),
+            _ConvBlock(input_dim, output_dim, init_type),
+        )
 
 
 class _Encoder1(nn.Module):
@@ -79,183 +64,94 @@ class _Encoder1(nn.Module):
         self.encoder_block4 = network.features[18:27]
         self.encoder_block5 = network.features[27:36]
 
-    def forward(self, input: torch.Tensor):
+    def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor]:
         x1 = self.encoder_block1(input)
         x2 = self.encoder_block2(x1)
         x3 = self.encoder_block3(x2)
         x4 = self.encoder_block4(x3)
         x5 = self.encoder_block5(x4)
-        return x5, x4, x3, x2, x1
+        return [x1, x2, x3, x4, x5]
 
 
-class _Decoder1(nn.Module):
-
-    def __init__(
-        self, input_dim: int, output_dim: int, filters: list, init_type: Optional[str]
-    ) -> None:
-        super().__init__()
-        assert len(filters) == 4
-
-        self.decoder_block1 = _DecoderBlock1(
-            input_dim, filters[2], skip_dim=filters[3], init_type=init_type
-        )
-        self.decoder_block2 = _DecoderBlock1(
-            filters[2], filters[1], skip_dim=filters[2], init_type=init_type
-        )
-        self.decoder_block3 = _DecoderBlock1(
-            filters[1], filters[0], skip_dim=filters[1], init_type=init_type
-        )
-        self.decoder_block4 = _DecoderBlock1(
-            filters[0], output_dim, skip_dim=filters[0], init_type=init_type
-        )
-
-    def forward(self, input: torch.Tensor, skip_list: List[torch.Tensor]):
-        assert len(skip_list) == 4
-        x1 = self.decoder_block1(input, skip_list[0])
-        x2 = self.decoder_block2(x1, skip_list[1])
-        x3 = self.decoder_block3(x2, skip_list[2])
-        output = self.decoder_block4(x3, skip_list[3])
-        return output
-
-
-class _Encoder2(nn.Module):
-    def __init__(self, input_dim: int, filters: list, init_type: Optional[str]) -> None:
-        super().__init__()
-        assert len(filters) == 4
-        self.max_pool = nn.MaxPool2d(kernel_size=2)
-
-        self.conv_block1 = _ConvBlock1(input_dim, filters[0], init_type)
-        self.conv_block2 = _ConvBlock1(filters[0], filters[1], init_type)
-        self.conv_block3 = _ConvBlock1(filters[1], filters[2], init_type)
-        self.conv_block4 = _ConvBlock1(filters[2], filters[3], init_type)
-
-    def forward(self, input: torch.Tensor):
-        x1 = self.conv_block1(input)
-        p1 = self.max_pool(x1)
-        x2 = self.conv_block2(p1)
-        p2 = self.max_pool(x2)
-        x3 = self.conv_block3(p2)
-        p3 = self.max_pool(x3)
-        x4 = self.conv_block4(p3)
-        p4 = self.max_pool(x4)
-        return p4, x4, x3, x2, x1
-
-
-class _Decoder2(nn.Module):
-
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-        filters: list,
-        encoder1_filters: list,
-        init_type: Optional[str],
-    ) -> None:
-        super().__init__()
-        assert len(filters) == 4
-        assert len(encoder1_filters) == 4
-
-        self.decoder_block1 = _DecoderBlock2(
-            input_dim,
-            filters[3],
-            skip1_dim=encoder1_filters[3],
-            skip2_dim=filters[3],
-            init_type=init_type,
-        )
-        self.decoder_block2 = _DecoderBlock2(
-            filters[3],
-            filters[2],
-            skip1_dim=encoder1_filters[2],
-            skip2_dim=filters[2],
-            init_type=init_type,
-        )
-        self.decoder_block3 = _DecoderBlock2(
-            filters[2],
-            filters[1],
-            skip1_dim=encoder1_filters[1],
-            skip2_dim=filters[1],
-            init_type=init_type,
-        )
-        self.decoder_block4 = _DecoderBlock2(
-            filters[1],
-            output_dim,
-            skip1_dim=encoder1_filters[0],
-            skip2_dim=filters[0],
-            init_type=init_type,
-        )
-
-    def forward(
-        self, input: torch.Tensor, skip_list1: torch.Tensor, skip_list2: torch.Tensor
-    ):
-        x1 = self.decoder_block1(input, skip_list1[0], skip_list2[0])
-        x2 = self.decoder_block2(x1, skip_list1[1], skip_list2[1])
-        x3 = self.decoder_block3(x2, skip_list1[2], skip_list2[2])
-        output = self.decoder_block4(x3, skip_list1[3], skip_list2[3])
-        return output
+def _get_decoder_config(
+    decoder_output_dim: int,
+    aspp_output_dim: int,
+    *encoder_dims_tuple: List[int],
+) -> Dict:
+    config = dict()
+    config["dims"] = (
+        [decoder_output_dim] + encoder_dims_tuple[-1][:-1] + [aspp_output_dim]
+    )
+    config["skip_dims_list"] = list()
+    for i in range(len(encoder_dims_tuple[0])):
+        skip_dims = [encoder_dims[i] for encoder_dims in encoder_dims_tuple]
+        config["skip_dims_list"].append(skip_dims)
+    return config
 
 
 class DoubleUNet(nn.Module):
     def __init__(
-        self, input_dim: int, output_dim: int, init_type: Optional[str]
+        self,
+        input_dim: int,
+        output_dim: int,
+        config: DictConfig,
+        init_type: Optional[str],
     ) -> None:
         super().__init__()
-        encoder1_filters = [64, 128, 256, 512, 512]
-        aspp1_output_dim = 64
-        decoder1_output_dim = 32
-        encoder2_filters = [32, 64, 128, 256]
-        aspp2_output_dim = 64
-        decoder2_output_dim = 32
-        atrous_rates = [1, 6, 12, 18]
+        encoder1_dims = config.get("encoder1_dims")
+        encoder2_dims = config.get("encoder2_dims")
+        decoder_output_dim = config.get("decoder_output_dim")
+        aspp_output_dim = config.get("aspp_output_dim")
+        atrous_rates = config.get("atrous_rates")
+
+        decoder1 = _get_decoder_config(
+            decoder_output_dim, aspp_output_dim, *[encoder1_dims]
+        )
+        decoder2 = _get_decoder_config(
+            decoder_output_dim, aspp_output_dim, *[encoder1_dims, encoder2_dims]
+        )
 
         # Network1
         self.e1 = _Encoder1()
         self.aspp1 = ASPP_v3(
-            encoder1_filters[-1], aspp1_output_dim, atrous_rates, init_type
+            encoder1_dims[-1], aspp_output_dim, atrous_rates, init_type
         )
-        self.d1 = _Decoder1(
-            aspp1_output_dim, decoder1_output_dim, encoder1_filters[:-1], init_type
-        )
+        self.d1 = Decoder(decoder_block=_DecoderBlock, init_type=init_type, **decoder1)
         self.output_layer1 = OutputBlock(
-            decoder1_output_dim, output_dim, init_type=init_type
+            decoder_output_dim, output_dim, init_type=init_type
         )
 
         # Network2
         self.max_pool = nn.MaxPool2d(kernel_size=2)
-        self.e2 = _Encoder2(input_dim, encoder2_filters, init_type)
+        self.e2 = Encoder(
+            input_dim, encoder2_dims, _ConvBlock, _EncoderBlock, init_type
+        )
         self.aspp2 = ASPP_v3(
-            encoder2_filters[-1], aspp2_output_dim, atrous_rates, init_type
+            encoder2_dims[-1], aspp_output_dim, atrous_rates, init_type
         )
-        self.d2 = _Decoder2(
-            aspp2_output_dim,
-            decoder2_output_dim,
-            filters=encoder2_filters,
-            encoder1_filters=encoder1_filters[:-1],
-            init_type=init_type,
-        )
+        self.d2 = Decoder(decoder_block=_DecoderBlock, init_type=init_type, **decoder2)
         self.output_layer2 = OutputBlock(
-            decoder2_output_dim, output_dim, init_type=init_type
+            decoder_output_dim, output_dim, init_type=init_type
         )
 
         self.combine_output_layer = OutputBlock(
             2 * output_dim, output_dim, init_type=init_type
         )
 
-    def forward(self, input):
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
         # Network1
-        skip_list1 = self.e1(input)
-        x1 = self.aspp1(skip_list1[0])
-        x2 = self.d1(x1, skip_list1[1:])
-        output1 = self.output_layer1(x2)
-
-        x3 = torch.multiply(input, output1)
+        x_list1 = self.e1(input)
+        x = self.aspp1(x_list1[-1])
+        x_list1 = x_list1[:-1]
+        x_list1_copy = x_list1.copy()
+        x = self.d1(x, x_list1)
+        output1 = self.output_layer1(x)
+        x = input * output1
 
         # Network2
-        skip_list2 = self.e2(x3)
-        x4 = self.aspp2(skip_list2[0])
-        x5 = self.d2(x4, skip_list1[1:], skip_list2[1:])
-        output2 = self.output_layer2(x5)
+        x_list2 = self.e2(x)
+        x = self.max_pool(self.aspp2(x_list2[-1]))
+        x = self.d2(x, *[x_list1_copy, x_list2])
+        output2 = self.output_layer2(x)
 
-        combine_output = torch.cat((output1, output2), dim=1)
-        output = self.combine_output_layer(combine_output)
-
-        return output
+        return self.combine_output_layer(torch.cat((output1, output2), dim=1))

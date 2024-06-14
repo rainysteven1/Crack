@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_msssim import MS_SSIM
 
-DEFAULT_CLASS_WEIGHTS = [0.04, 0.96]
+_DEFAULT_CLASS_WEIGHTS = [0.04, 0.96]
 
 __all__ = [
     "DiceLoss",
@@ -37,13 +37,13 @@ class DiceBCELoss(nn.Module):
 
     def __init__(
         self,
-        loss_weights: Optional[List[float]],
-        class_weights: Optional[List[float]],
+        loss_weights: List[float] = [1, 1],
+        class_weights: List[float] = _DEFAULT_CLASS_WEIGHTS,
         smooth: float = 1e-5,
     ):
         super().__init__()
-        self.loss_weights = loss_weights if loss_weights else [1, 1]
-        self.class_weights = class_weights if class_weights else DEFAULT_CLASS_WEIGHTS
+        self.loss_weights = loss_weights
+        self.class_weights = class_weights
         self.smooth = smooth
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
@@ -75,10 +75,13 @@ class IoULoss(nn.Module):
 
 class FocalLoss(nn.Module):
     def __init__(
-        self, class_weights: Optional[List[float]], alpha: float = 0.5, gamma: float = 2
+        self,
+        class_weights: List[float] = _DEFAULT_CLASS_WEIGHTS,
+        alpha: float = 0.5,
+        gamma: float = 2,
     ):
         super().__init__()
-        self.class_weights = class_weights if class_weights else DEFAULT_CLASS_WEIGHTS
+        self.class_weights = class_weights
         self.alpha = alpha
         self.gamma = gamma
 
