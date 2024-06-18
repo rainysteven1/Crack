@@ -1,3 +1,4 @@
 curve_callback:
   _target_: src.utils.CurveCallback
-  figure_dir: ${paths.output_dir}/figure
+  data_path: ${paths.output_dir}/figure/data
+  figure_path: ${paths.output_dir}/figure

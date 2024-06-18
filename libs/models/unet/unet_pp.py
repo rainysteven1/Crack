@@ -60,6 +60,7 @@ class UNet2Plus(nn.Module):
         input_dim: int,
         output_dim: int,
         dims: list,
+        is_upsample: bool = True,
         is_ds: bool = True,
         init_type: Optional[str] = None,
     ) -> None:
@@ -70,19 +71,31 @@ class UNet2Plus(nn.Module):
         self.e = Encoder(input_dim, dims, init_type=init_type)
 
         # Decoder
-        self.d01 = _DecoderBlock(dims[1], dims[0], init_type=init_type)
-        self.d11 = _DecoderBlock(dims[2], dims[1], init_type=init_type)
-        self.d21 = _DecoderBlock(dims[3], dims[2], init_type=init_type)
-        self.d31 = _DecoderBlock(dims[4], dims[3], init_type=init_type)
+        self.d01 = _DecoderBlock(dims[1], dims[0], is_upsample, init_type=init_type)
+        self.d11 = _DecoderBlock(dims[2], dims[1], is_upsample, init_type=init_type)
+        self.d21 = _DecoderBlock(dims[3], dims[2], is_upsample, init_type=init_type)
+        self.d31 = _DecoderBlock(dims[4], dims[3], is_upsample, init_type=init_type)
 
-        self.d02 = _DecoderBlock(dims[1], dims[0], N_concat=3, init_type=init_type)
-        self.d12 = _DecoderBlock(dims[2], dims[1], N_concat=3, init_type=init_type)
-        self.d22 = _DecoderBlock(dims[3], dims[2], N_concat=3, init_type=init_type)
+        self.d02 = _DecoderBlock(
+            dims[1], dims[0], is_upsample, N_concat=3, init_type=init_type
+        )
+        self.d12 = _DecoderBlock(
+            dims[2], dims[1], is_upsample, N_concat=3, init_type=init_type
+        )
+        self.d22 = _DecoderBlock(
+            dims[3], dims[2], is_upsample, N_concat=3, init_type=init_type
+        )
 
-        self.d03 = _DecoderBlock(dims[1], dims[0], N_concat=4, init_type=init_type)
-        self.d13 = _DecoderBlock(dims[2], dims[1], N_concat=4, init_type=init_type)
+        self.d03 = _DecoderBlock(
+            dims[1], dims[0], is_upsample, N_concat=4, init_type=init_type
+        )
+        self.d13 = _DecoderBlock(
+            dims[2], dims[1], is_upsample, N_concat=4, init_type=init_type
+        )
 
-        self.d04 = _DecoderBlock(dims[1], dims[0], N_concat=5, init_type=init_type)
+        self.d04 = _DecoderBlock(
+            dims[1], dims[0], is_upsample, N_concat=5, init_type=init_type
+        )
 
         self.final = (
             OutputBlock(dims[0], output_dim, init_type)

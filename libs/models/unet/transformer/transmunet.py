@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from ...modules.base import BasicBlock, OutputBlock, SqueezeExciteBlock
 from ...modules.dcn import DeformConv2d
 from ...transformer.mobilevit import MobileViTBlock
+from .._base import Decoder, Encoder
 
 __all__ = ["TransMUNet"]
 
@@ -119,18 +120,25 @@ class _EncoderBlock(nn.Sequential):
         self,
         input_dim: int,
         output_dim: int,
-        is_vit: bool,
+        index: int,
+        length: int,
+        block_configs: List[List[int]],
         init_type: Optional[str] = None,
         **kwargs,
     ) -> None:
+
         super().__init__(
             nn.MaxPool2d(kernel_size=2, stride=2),
             _DilatedRedisual(input_dim, output_dim, init_type=init_type),
             (
                 nn.Identity()
-                if not is_vit
+                if index == length - 2
                 else MobileViTBlock(
-                    output_dim, output_dim, init_type=init_type, **kwargs
+                    output_dim,
+                    output_dim,
+                    block_config=None if index == length - 2 else block_configs[index],
+                    init_type=init_type,
+                    **kwargs,
                 )
             ),
         )
@@ -138,7 +146,7 @@ class _EncoderBlock(nn.Sequential):
 
 class _DecoderBlock(nn.Module):
     def __init__(
-        self, input_dim: int, output_dim: int, init_type: Optional[str] = None
+        self, input_dim: int, output_dim: int, _: int, init_type: Optional[str] = None
     ) -> None:
         super().__init__()
         self.upsample = _DUC(input_dim, 2 * input_dim, init_type=init_type)
@@ -163,41 +171,29 @@ class TransMUNet(nn.Module):
         patch_size = trunk_config.pop("patch_size")
         block_configs = trunk_config.pop("block_configs")
 
-        self.encoder_blocks = nn.ModuleList(
-            [_DilatedRedisual(input_dim, dims[0], init_type=init_type)]
-            + [
-                _EncoderBlock(
-                    dims[i],
-                    dims[i + 1],
-                    i != length - 2,
-                    init_type,
-                    patch_size=patch_size,
-                    block_config=None if i == length - 2 else block_configs[i],
-                    transformer_config=trunk_config,
-                )
-                for i in range(length - 1)
-            ]
+        self.encoder = Encoder(
+            input_dim,
+            dims,
+            _DilatedRedisual,
+            _EncoderBlock,
+            init_type,
+            length=length,
+            block_configs=block_configs,
+            patch_size=patch_size,
+            transformer_config=trunk_config,
         )
-        self.decoder_blocks = nn.ModuleList(
-            [
-                _DecoderBlock(dims[i], dims[i - 1], init_type=init_type)
-                for i in range(length - 1, 0, -1)
-            ]
-        )
+
+        self.decoder = Decoder(dims, _DecoderBlock, init_type)
+
         self.boundary = _Boundary(dims[0], 1, init_type=init_type)
         self.output_block = OutputBlock(dims[0], output_dim, init_type=init_type)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        x_list = list()
-        for encoder_block in self.encoder_blocks:
-            x = encoder_block(x)
-            x_list.append(x)
+        x_list = self.encoder(input)
         x = x_list.pop()
         B_out = repeat(
             self.boundary(x_list[0]), "b 1 h w -> b c h w", c=x_list[0].shape[1]
         )
         x_list[0] = x_list[0] + B_out
-        for decoder_block in self.decoder_blocks:
-            x = decoder_block(x, x_list.pop())
+        x = self.decoder(x, x_list)
         return F.sigmoid(B_out), self.output_block(x)

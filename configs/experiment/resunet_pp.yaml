@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: kvasir
+  - override /data: crack
   - override /model: net/unet/resunet_pp
   - override /callbacks: default
   - override /trainer: default
@@ -15,6 +15,12 @@ defaults:
 tags: ["UNet", "ResUNet"]
 
 seed: 42
+
+start_time: null
+
+hydra:
+  run:
+    dir: ${paths.log_dir}/${task_name}/runs/${start_time}/resunet_pp
 
 trainer:
   min_epochs: 200
@@ -29,10 +35,8 @@ callbacks:
 
 logger:
   wandb:
-    project: "Crack"
-    entity: "rainysteven_team"
+    project: Crack
+    entity: rainysteven_team
     log_model: false
     tags: ${tags}
-    group: "kvasir"
-  aim:
-    experiment: "crack"
+    group: crack

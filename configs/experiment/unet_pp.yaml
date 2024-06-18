@@ -16,6 +16,12 @@ tags: ["UNet", "UNet++"]
 
 seed: 42
 
+start_time: null
+
+hydra:
+  run:
+    dir: ${paths.log_dir}/${task_name}/runs/${start_time}/unet_pp
+
 trainer:
   min_epochs: 100
   max_epochs: 100
@@ -28,7 +34,8 @@ callbacks:
 
 logger:
   wandb:
+    project: "Crack"
+    entity: "rainysteven_team"
+    log_model: false
     tags: ${tags}
     group: "crack"
-  aim:
-    experiment: "crack"

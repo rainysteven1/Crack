@@ -4,7 +4,8 @@
 
 workspace_dir=$1
 category=$2
+start_time=$3
 
 cd "$workspace_dir" || exit
 
-python src/train.py trainer=gpu experiment="$category" logger=csv
+python src/train.py trainer=gpu experiment="$category" start_time="$start_time" logger=csv

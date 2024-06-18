@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
 
 from ...backbone.resnet import RedisualBlock
-from ...modules.base import BasicBlock, SqueezeExciteBlock
+from ...modules.base import BasicBlock, OutputBlock, SqueezeExciteBlock
 from ...modules.pyramid import ASPP_v3
 
 __all__ = ["ResUNet2Plus"]
@@ -55,27 +55,27 @@ class _DecoderBlock(nn.Module):
 
 class ResUNet2Plus(nn.Module):
 
-    layer_configurations = [16, 32, 64, 128, 256]
-    atrous_rates = [1, 6, 12, 18]
-
     def __init__(
-        self, input_dim: int, output_dim: int, init_type: Optional[str] = None
+        self,
+        input_dim: int,
+        output_dim: int,
+        dims: List[int],
+        atrous_rates: List[int],
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
-        length = len(self.layer_configurations)
+        length = len(dims)
         kwargs.update({"init_type": init_type})
 
-        self.input_block = RedisualBlock(
-            input_dim, self.layer_configurations[0], is_bn=False, **kwargs
-        )
+        self.input_block = RedisualBlock(input_dim, dims[0], is_bn=False, **kwargs)
         kwargs.update({"reversed": True})
         self.encoder_blocks = nn.ModuleList(
             [
                 nn.Sequential(
-                    SqueezeExciteBlock(self.layer_configurations[i]),
+                    SqueezeExciteBlock(dims[i]),
                     RedisualBlock(
-                        self.layer_configurations[i],
-                        self.layer_configurations[i + 1],
+                        dims[i],
+                        dims[i + 1],
                         stride=2,
                         **kwargs,
                     ),
@@ -84,37 +84,29 @@ class ResUNet2Plus(nn.Module):
             ]
             + [
                 ASPP_v3(
-                    self.layer_configurations[-2],
-                    self.layer_configurations[-1],
-                    self.atrous_rates,
+                    dims[-2],
+                    dims[-1],
+                    atrous_rates,
                     init_type,
                 )
             ]
         )
         self.decoder_blocks = nn.ModuleList(
             _DecoderBlock(
-                self.layer_configurations[i],
-                self.layer_configurations[i - 1],
-                self.layer_configurations[i - 2],
+                dims[i],
+                dims[i - 1],
+                dims[i - 2],
             )
             for i in range(length - 1, 1, -1)
         )
         self.output_block = nn.Sequential(
             ASPP_v3(
-                self.layer_configurations[1],
-                self.layer_configurations[0],
-                self.atrous_rates,
+                dims[1],
+                dims[0],
+                atrous_rates,
                 init_type,
             ),
-            BasicBlock(
-                self.layer_configurations[0],
-                output_dim,
-                kernel_size=1,
-                padding=0,
-                is_bn=False,
-                is_relu=False,
-                init_type=init_type,
-            ),
+            OutputBlock(dims[0], output_dim, init_type=init_type),
         )
 
     def forward(self, input: torch.Tensor):

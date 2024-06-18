@@ -17,7 +17,7 @@ net:
   _target_: libs.models.unet.u2net.u2net_S
   input_dim: 3
   output_dim: 1
-  filters: [64, 64, 64, 64]
+  dims: [64, 64, 64, 64]
   n_blocks: [7, 6, 5, 4]
   init_type: null
 

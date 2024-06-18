@@ -5,14 +5,14 @@
 
 defaults:
   - override /data: crack
-  - override /model: net/unet/u2net
+  - override /model: net/unet/unet
   - override /callbacks: default
   - override /trainer: default
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["crack", "UNet", "U2Net"]
+tags: ["UNet"]
 
 seed: 42
 
@@ -20,18 +20,22 @@ start_time: null
 
 hydra:
   run:
-    dir: ${paths.log_dir}/${task_name}/runs/${start_time}/u2net
+    dir: ${paths.log_dir}/${task_name}/runs/${start_time}/unet
 
 trainer:
   min_epochs: 100
-  max_epochs: 1000
+  max_epochs: 100
 
 model:
   compile: false
 
+callbacks:
+  early_stopping: null
+
 logger:
   wandb:
+    project: Crack
+    entity: rainysteven_team
+    log_model: false
     tags: ${tags}
-    group: "crack"
-  aim:
-    experiment: "crack"
+    group: crack

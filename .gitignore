@@ -154,9 +154,7 @@ configs/local/default.yaml
 !/resources/image
 /notebooks/
 
-/scripts/*
-!/scripts/docker.sh
-!/scripts/schedule.sh
+/scripts/run.sh
 .env
 *.ipynb
 

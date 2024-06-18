@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 import torchmetrics.classification as C
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric, MetricCollection

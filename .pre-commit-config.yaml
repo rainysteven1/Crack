@@ -108,6 +108,7 @@ repos:
       - id: codespell
         args:
           - --skip=logs/**,data/**,*.ipynb
+          - --ignore-words-list=fpr
           # - --ignore-words-list=abc,def
 
   # jupyter notebook cell output clearing

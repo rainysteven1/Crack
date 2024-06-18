@@ -33,7 +33,7 @@ class DoubleConv(nn.Sequential):
 
 class _EncoderBlock(nn.Sequential):
     def __init__(
-        self, input_dim: int, output_dim: int, init_type: Optional[str] = None
+        self, input_dim: int, output_dim: int, _: int, init_type: Optional[str] = None
     ) -> None:
         super().__init__(
             nn.MaxPool2d(kernel_size=2),
@@ -57,7 +57,7 @@ class Encoder(nn.Module):
         self.layers = nn.ModuleList(
             [stem_block(input_dim, dims[0], init_type=init_type)]
             + [
-                encoder_block(dims[i], dims[i + 1], init_type=init_type, **kwargs)
+                encoder_block(dims[i], dims[i + 1], i, init_type=init_type, **kwargs)
                 for i in range(len(dims) - 1)
             ]
         )

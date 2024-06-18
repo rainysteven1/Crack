@@ -45,7 +45,7 @@ class _DecoderBlock(nn.Module):
 
 class _EncoderBlock(nn.Sequential):
     def __init__(
-        self, input_dim: int, output_dim: int, init_type: Optional[str] = None
+        self, input_dim: int, output_dim: int, _: int, init_type: Optional[str] = None
     ) -> None:
         super().__init__(
             nn.MaxPool2d(kernel_size=2),
@@ -95,7 +95,7 @@ class DoubleUNet(nn.Module):
         input_dim: int,
         output_dim: int,
         config: DictConfig,
-        init_type: Optional[str],
+        init_type: Optional[str] = None,
     ) -> None:
         super().__init__()
         encoder1_dims = config.get("encoder1_dims")

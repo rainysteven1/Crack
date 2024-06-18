@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -289,9 +289,9 @@ class _U2Net(nn.Module):
 def u2net_B(
     input_dim: int,
     output_dim: int,
-    dims: list,
-    n_blocks: list[int],
-    init_type: Optional[str],
+    dims: List[int],
+    n_blocks: List[int],
+    init_type: Optional[str] = None,
 ):
     kwargs = {
         "e_RUS0_ratio": 4,
@@ -305,9 +305,9 @@ def u2net_B(
 def u2net_S(
     input_dim: int,
     output_dim: int,
-    dims: list,
-    n_blocks: list[int],
-    init_type: Optional[str],
+    dims: List[int],
+    n_blocks: List[int],
+    init_type: Optional[str] = None,
 ):
     kwargs = {
         "e_RUS0_ratio": 4,

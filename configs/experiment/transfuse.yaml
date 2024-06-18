@@ -17,9 +17,15 @@ tags: ["Transformer", "UNet", "TransFuse"]
 
 seed: 42
 
+start_time: null
+
+hydra:
+  run:
+    dir: ${paths.log_dir}/${task_name}/runs/${start_time}/tranfuse
+
 trainer:
-  min_epochs: 100
-  max_epochs: 100
+  min_epochs: 1
+  max_epochs: 1
 
 model:
   compile: false
@@ -29,8 +35,8 @@ callbacks:
 
 logger:
   wandb:
-    project: "Crack"
-    entity: "rainysteven_team"
+    project: Crack
+    entity: rainysteven_team
     log_model: false
     tags: ${tags}
-    group: "crack"
+    group: crack
