@@ -1,11 +1,46 @@
-defaults:
-  - /model/net/transformer/mobilenet/small@_here_
-
 config:
-  dims: [16, 16, 24, 24, 24, 48, 48, 64, 64, 80, 80, 320]
+  dims: [16, 24, 48, 64, 80]
+  last_output_dim_ratio: 4
 
   redisual:
+    strides: [1, 2]
+    n_stages_list: [1, 3]
     ratio: 2
 
   trunk:
-    block_configs: [[2, 64, 2], [4, 80, 2], [3, 96, 2]]
+    strides: [2, 2, 2]
+    is_dilates: [false, false, false]
+    transformer:
+      block_configs: [[2, 64, 2], [4, 80, 2], [3, 96, 2]]
+      patch_size: 2
+      n_heads: 4
+      head_dim: null
+      qkv_bias: true
+      attn_dropout: 0.1
+      mlp_dropout: 0.0
+      proj_dropout: 0.1
+
+  pretrained:
+    path: ./resources/checkpoints/mobilevit/mobilevit-xx-small.bin
+    weights_keys:
+      stem: conv_stem
+      last_conv: conv_1x1_exp
+      root: mobilevit.{{}}.{0}.{1}
+      inverted_residual:
+        root: encoder.layer.{}.{}.{}
+        normal: layer
+        downsample: downsampling_layer
+        blocks: [expand_1x1, conv_3x3, reduce_1x1]
+      mobilevit_block:
+        root: encoder.layer.{0}.{{}}
+        local_representation: [conv_kxk, conv_1x1]
+        transformer:
+          root: mobilevit.encoder.layer.{0}.transformer.layer.{1}.{{}}.{2}
+          layernorm: mobilevit.encoder.layer.{}.layernorm.{}
+          norms: [layernorm_before, layernorm_after]
+          attn:
+            attention: attention.attention.{}
+            proj_out: attention.output.dense
+          mlp: [intermediate.dense, output.dense]
+        fusion_block1: conv_projection
+        fusion_block2: fusion

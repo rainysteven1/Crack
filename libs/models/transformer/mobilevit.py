@@ -182,57 +182,56 @@ class MobileViT(nn.Sequential):
 
     def __init__(self, input_dim: int, config: DictConfig) -> None:
         dims = config.get("dims")
+        dims.insert(0, dims[0])
         redisual_config = config.get("redisual")
         trunk_config = config.get("trunk")
         pretrained = config.get("pretrained", None)
+        self.dilation = 1
 
         strides = redisual_config.pop("strides")
-        length = len(strides)
-        patch_size = trunk_config.pop("patch_size")
+        n_stages_list = redisual_config.pop("n_stages_list")
+        self.length = len(strides)
+        inverted_residuals = [
+            self._make_inverted_residuals(
+                dims[i], dims[i + 1], stride, n_stages, **redisual_config
+            )
+            for i, (stride, n_stages) in enumerate(zip(strides, n_stages_list))
+        ]
 
+        strides = trunk_config.pop("strides")
+        is_dilates = trunk_config.pop("is_dilates")
+        transformer_config = trunk_config.pop("transformer")
+        patch_size = transformer_config.pop("patch_size")
+        block_configs = transformer_config.pop("block_configs")
+        mobilevit_blocks = [
+            self._make_mobilevit_blocks(
+                dims[i],
+                dims[i + 1],
+                stride,
+                is_dilate,
+                patch_size=patch_size,
+                block_config=block_config,
+                transformer_config=transformer_config,
+                **redisual_config,
+            )
+            for i, (stride, is_dilate, block_config) in enumerate(
+                zip(strides, is_dilates, block_configs), start=self.length
+            )
+        ]
+
+        last_output_dim = dims[-1] * config.get("last_output_dim_ratio")
         blocks = [
             BasicBlock(
                 input_dim, dims[0], stride=2, is_bias=False, relu_type=self.relu_type
             ),
             BasicBlock(
-                dims[-2],
                 dims[-1],
+                last_output_dim,
                 kernel_size=1,
                 padding=0,
                 is_bias=False,
                 relu_type=self.relu_type,
             ),
-        ]
-        inverted_residuals = [
-            InvertedResidual(
-                dims[i],
-                dims[i + 1],
-                stride=stride,
-                relu_type=self.relu_type,
-                **redisual_config,
-            )
-            for i, stride in enumerate(strides)
-        ]
-        mobilevit_blocks = [
-            nn.Sequential(
-                *[
-                    InvertedResidual(
-                        dims[i * 2 + length],
-                        dims[i * 2 + length + 1],
-                        stride=2,
-                        **redisual_config,
-                    ),
-                    MobileViTBlock(
-                        dims[i * 2 + length + 1],
-                        dims[i * 2 + length + 2],
-                        patch_size,
-                        block_config,
-                        trunk_config,
-                        self.relu_type,
-                    ),
-                ]
-            )
-            for i, block_config in enumerate(trunk_config.pop("block_configs"))
         ]
         blocks = blocks[:1] + inverted_residuals + mobilevit_blocks + blocks[1:]
 
@@ -241,6 +240,64 @@ class MobileViT(nn.Sequential):
         if pretrained:
             path = pretrained.pop("path")
             self._load_from(torch.load(path), **pretrained)
+
+    def _make_inverted_residuals(
+        self, input_dim: int, output_dim: int, stride: int, n_stages: int, ratio: int
+    ) -> nn.Sequential:
+        stages = list()
+        for i in range(n_stages):
+            s = stride if i == 0 else 1
+            stages.append(
+                InvertedResidual(
+                    input_dim,
+                    output_dim,
+                    stride=s,
+                    ratio=ratio,
+                    relu_type=self.relu_type,
+                )
+            )
+            input_dim = output_dim
+        return nn.Sequential(*stages)
+
+    def _make_mobilevit_blocks(
+        self,
+        input_dim: int,
+        output_dim: int,
+        stride: int,
+        is_dilate: bool,
+        ratio: int,
+        patch_size: int,
+        block_config: List[int],
+        transformer_config: DictConfig,
+    ) -> nn.Sequential:
+        stages = list()
+        if stride == 2:
+            if is_dilate:
+                self.dilation *= 2
+                stride = 1
+            stages.append(
+                InvertedResidual(
+                    input_dim,
+                    output_dim,
+                    stride=stride,
+                    dilation=self.dilation,
+                    ratio=ratio,
+                    relu_type=self.relu_type,
+                )
+            )
+            input_dim = output_dim
+
+        stages.append(
+            MobileViTBlock(
+                input_dim,
+                output_dim,
+                patch_size,
+                block_config,
+                transformer_config,
+                self.relu_type,
+            )
+        )
+        return nn.Sequential(*stages)
 
     def _load_from(self, weights: OrderedDict, weights_keys: DictConfig):
         state_dict = dict()
@@ -252,88 +309,75 @@ class MobileViT(nn.Sequential):
                 str_list[-1],
             )
 
-            if block_idx == 0 or not str_list[1].isnumeric():
+            if not str_list[1].isnumeric():
                 weights_key = root.format(
                     weights_keys["stem" if block_idx == 0 else "last_conv"]
                 )
             else:
-                layer_idx = int(str_list[1])
-                keys_dict = weights_keys["inverted_residual"]
-                blocks = keys_dict["blocks"]
-                if str_list[2] == "layers":
+                block_idx = str(block_idx - 1)
+                if str_list[2].isnumeric():
+                    keys_dict = weights_keys["inverted_residual"]
+                    blocks = keys_dict["blocks"]
                     weights_key = root.format(
                         keys_dict["root"].format(
-                            "0" if block_idx == 1 else "1",
-                            ".".join(
-                                [
-                                    keys_dict["normal"],
-                                    "0" if block_idx == 1 else str(block_idx - 2),
-                                ]
+                            block_idx,
+                            (
+                                keys_dict["downsample"]
+                                if int(block_idx) >= self.length
+                                else ".".join([keys_dict["normal"], str_list[1]])
                             ),
-                            blocks[layer_idx],
+                            blocks[int(str_list[2])],
                         )
                     )
                 else:
-                    block_idx = str(block_idx - 3)
-                    if str_list[2].isnumeric():
-                        layer_idx = int(str_list[2])
-                        keys_dict = weights_keys["inverted_residual"]
+                    keys_dict = weights_keys["mobilevit_block"]
+                    block_root = keys_dict["root"].format(block_idx)
+                    if (
+                        "local_representation" not in str_list
+                        and "transformer" not in str_list
+                    ):
                         weights_key = root.format(
-                            keys_dict["root"].format(
-                                block_idx,
-                                keys_dict["downsample"],
-                                blocks[layer_idx],
-                            )
+                            block_root.format(keys_dict[str_list[2]])
                         )
                     else:
-                        keys_dict = weights_keys["mobilevit_block"]
-                        block_root = keys_dict["root"].format(block_idx)
-                        if (
-                            "local_representation" not in str_list
-                            and "transformer" not in str_list
-                        ):
+                        layer_idx = int(str_list[3])
+                        if "local_representation" in str_list:
                             weights_key = root.format(
-                                block_root.format(keys_dict[str_list[2]])
-                            )
-                        else:
-                            layer_idx = int(str_list[3])
-                            if "local_representation" in str_list:
-                                weights_key = root.format(
-                                    block_root.format(
-                                        keys_dict["local_representation"][layer_idx]
-                                    )
+                                block_root.format(
+                                    keys_dict["local_representation"][layer_idx]
                                 )
-                            elif "transformer" in str_list:
-                                keys_dict = keys_dict["transformer"]
-                                if "norm" not in str_list and "fn" not in str_list:
-                                    weights_key = keys_dict["layernorm"].format(
-                                        block_idx, str_list[-1]
+                            )
+                        elif "transformer" in str_list:
+                            keys_dict = keys_dict["transformer"]
+                            if "norm" not in str_list and "fn" not in str_list:
+                                weights_key = keys_dict["layernorm"].format(
+                                    block_idx, str_list[-1]
+                                )
+                            else:
+                                encoder_block_idx = int(str_list[4])
+                                root = keys_dict["root"].format(
+                                    block_idx, layer_idx, str_list[-1]
+                                )
+                                if "norm" in str_list:
+                                    weights_key = root.format(
+                                        keys_dict["norms"][encoder_block_idx]
                                     )
-                                else:
-                                    encoder_block_idx = int(str_list[4])
-                                    root = keys_dict["root"].format(
-                                        block_idx, layer_idx, str_list[-1]
-                                    )
-                                    if "norm" in str_list:
+                                elif "fn" in str_list:
+                                    if encoder_block_idx == 0:
+                                        keys_dict = keys_dict["attn"]
                                         weights_key = root.format(
-                                            keys_dict["norms"][encoder_block_idx]
+                                            keys_dict["proj_out"]
+                                            if "proj_out" in str_list
+                                            else keys_dict["attention"].format(
+                                                str_list[-2]
+                                            )
                                         )
-                                    elif "fn" in str_list:
-                                        if encoder_block_idx == 0:
-                                            keys_dict = keys_dict["attn"]
-                                            weights_key = root.format(
-                                                keys_dict["proj_out"]
-                                                if "proj_out" in str_list
-                                                else keys_dict["attention"].format(
-                                                    str_list[-2]
-                                                )
-                                            )
-                                        else:
-                                            weights_key = root.format(
-                                                keys_dict["mlp"][
-                                                    0 if str_list[-2] == "0" else 1
-                                                ]
-                                            )
+                                    else:
+                                        weights_key = root.format(
+                                            keys_dict["mlp"][
+                                                0 if str_list[-2] == "0" else 1
+                                            ]
+                                        )
 
             state_dict[key] = weights[weights_key]
         self.load_state_dict(state_dict)

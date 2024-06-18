@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...utils.maths import make_divisible
 from ..modules.base import BasicBlock, IntermediateSequential, SqueezeExciteBlock
 from ._utils import fixed_padding
 
@@ -62,22 +63,6 @@ _MOBILENET_V3_CFG_SMALL = [
     [5, 576, 96, True, "HS", 1],
     [5, 576, 96, True, "HS", 1],
 ]
-
-
-def _make_divisible(v: float, divisor: int, min_value: Optional[int] = None) -> int:
-    """This function is taken from the original tf repo.
-
-    It ensures that all layers have a channel number that is divisible by 8
-    It can be seen here:
-    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
-    """
-    if min_value is None:
-        min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    # Make sure that round down does not go down by more than 10%.
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
 
 
 class InvertedResidual(nn.Sequential):
@@ -142,7 +127,7 @@ class InvertedResidual(nn.Sequential):
                 ),
             )
         if is_se:
-            se_dim = _make_divisible(middle_dim // 4, 8)
+            se_dim = make_divisible(middle_dim // 4, 8)
             conv_list.insert(
                 -1,
                 SqueezeExciteBlock(
@@ -182,7 +167,7 @@ class _MoblieNetHead(IntermediateSequential):
         self.is_dilation = output_stride is not None
         self.round_nearest = round_nearest
 
-        first_output_dim = _make_divisible(
+        first_output_dim = make_divisible(
             self.first_output_dim * width_mult, round_nearest
         )
         self.current_stride = 2
@@ -233,9 +218,9 @@ class _MobileNetV2(_MoblieNetHead):
         input_dim: int,
         output_stride: Optional[int],
         width_mult: float,
-        inverted_redisual_cfg: Optional[List],
-        init_type: Optional[str],
-        return_intermediate: bool,
+        inverted_redisual_cfg: Optional[List] = None,
+        init_type: Optional[str] = None,
+        return_intermediate: bool = True,
     ) -> None:
         inverted_redisual_cfg = (
             inverted_redisual_cfg if inverted_redisual_cfg else _MOBILENET_V2_CFG
@@ -268,7 +253,7 @@ class _MobileNetV2(_MoblieNetHead):
                     stride = s
                     dilation = 1
                     self.current_stride *= s
-            output_dim = _make_divisible(c * self.width_mult, self.round_nearest)
+            output_dim = make_divisible(c * self.width_mult, self.round_nearest)
             stage = list()
             # layers
             for i in range(n):
@@ -370,7 +355,7 @@ class _MobileNetV3(_MoblieNetHead):
                     stride = s
                     dilation = 1
                     self.current_stride *= s
-            output_dim = _make_divisible(c * self.width_mult, self.round_nearest)
+            output_dim = make_divisible(c * self.width_mult, self.round_nearest)
             stages.append(
                 InvertedResidual(
                     self.middle_dim,
